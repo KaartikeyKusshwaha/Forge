@@ -1,0 +1,62 @@
+name: Forge checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - run: uv sync --extra dev --frozen
+      - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
+      - run: uv run pytest -q --basetemp=.forge/pytest
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: uv sync --extra dev --frozen
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:extension
+      - run: pnpm test:background
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Start local fixture service
+        run: |
+          uv run forge serve --with-worker > /tmp/forge.log 2>&1 &
+          for attempt in $(seq 1 20); do
+            if curl --fail http://127.0.0.1:8787/health; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/forge.log
+          exit 1
+      - run: pnpm test:extension
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extension-evidence
+          path: test-results/
+  sandbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - run: uv sync --extra dev --frozen
+      - run: docker build -f infra/sandbox/Dockerfile.python -t forge-python:local infra/sandbox
+      - run: docker build -f infra/sandbox/Dockerfile.node -t forge-node:local infra/sandbox
+      - run: uv run pytest tests/test_sandbox_live.py -q --basetemp=.forge/docker-tests
+        env:
+          FORGE_TEST_DOCKER: '1'

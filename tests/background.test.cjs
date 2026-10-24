@@ -1,0 +1,63 @@
+const {test} = require("node:test");
+const assert = require("node:assert/strict");
+const vm = require("node:vm");
+const fs = require("node:fs");
+
+function service(values = {}) {
+  let listener, accessLevel;
+  const data = {...values}, requests = [];
+  const storage = {
+    get: async keys => Object.fromEntries((Array.isArray(keys) ? keys : [keys]).map(k => [k, data[k]])),
+    set: async values => Object.assign(data, values),
+    setAccessLevel: async value => {accessLevel = value.accessLevel;},
+  };
+  const chrome = {storage: {local: storage, session: storage}, action: {onClicked: {addListener() {}}},
+    runtime: {getURL: file => "chrome-extension://fixture/" + file, openOptionsPage: async () => {},
+      onMessage: {addListener(fn) {listener = fn;}}}};
+  const fetch = async (url, options) => {
+    requests.push({url, options});
+    return {ok: true, json: async () => ({service: "forge"})};
+  };
+  vm.runInNewContext(fs.readFileSync("extension/background.js", "utf8"), {chrome, URL, fetch, AbortSignal});
+  const send = (action, extra = {}, source = "github") => new Promise(resolve => {
+    const sender = source === "options" ? {url: chrome.runtime.getURL("options.html")} :
+      {url: source === "github" ? "https://github.com/owner/repo/issues/1" : "https://evil.example", tab: {id: 1}};
+    listener({type: "forge", action, ...extra}, sender, resolve);
+  });
+  return {send, requests, data, accessLevel};
+}
+
+test("background storage restricts token access and sends it only to loopback", async () => {
+  const serviceWorker = service({token: "private-fixture-owner-token", baseUrl: "http://127.0.0.1:8787"});
+  assert.equal(serviceWorker.accessLevel, "TRUSTED_CONTEXTS");
+  const result = await serviceWorker.send("status");
+  assert.equal(result.ok, true);
+  assert.equal(serviceWorker.requests[0].url, "http://127.0.0.1:8787/api/status");
+  assert.equal(serviceWorker.requests[0].options.headers.Authorization, "Bearer private-fixture-owner-token");
+  assert.ok(!JSON.stringify(result).includes("private-fixture"));
+});
+
+test("only the extension options page can configure the backend", async () => {
+  const s = service();
+  const values = {baseUrl: "http://127.0.0.1:8787", token: "a-private-fixture-token-long-enough"};
+  assert.equal((await s.send("configure", values)).ok, false);
+  assert.equal((await s.send("configure", values, "options")).ok, true);
+  const config = await s.send("configuration", {}, "options");
+  assert.equal(config.data.paired, true);
+  assert.equal(config.data.token, undefined);
+});
+
+test("a GitHub page cannot turn the service worker into an arbitrary fetch proxy", async () => {
+  const s = service({token: "fixture-token", baseUrl: "http://127.0.0.1:8787"});
+  assert.equal((await s.send("fetch", {url: "http://metadata.internal"})).ok, false);
+  assert.equal((await s.send("run", {id: "../../other"})).ok, false);
+  assert.equal((await s.send("status", {}, "evil")).ok, false);
+  assert.equal(s.requests.length, 0);
+});
+
+test("nonloopback settings and unpaired requests are rejected", async () => {
+  const s = service();
+  assert.equal((await s.send("status")).ok, false);
+  assert.equal((await s.send("configure", {baseUrl: "https://paid.example", token: "long-token-that-is-never-written"}, "options")).ok, false);
+  assert.equal(s.requests.length, 0);
+});

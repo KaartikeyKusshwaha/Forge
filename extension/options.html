@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forge · Connection</title><link rel="stylesheet" href="options.css"></head>
+<body><main>
+  <div class="brand"><span class="mark">F</span> Forge <span class="tag">GITHUB COMPANION</span></div>
+  <p class="eyebrow">YOUR WORKSPACE, CONNECTED</p>
+  <h1>A little setup.<br>A lot less busywork.</h1>
+  <p class="intro">Connect this browser to your local Forge service. Your GitHub issues stay at the centre of the work.</p>
+  <form id="connection">
+    <label for="endpoint">Service address</label><input id="endpoint" type="url" value="http://127.0.0.1:8787" required>
+    <label for="token">Owner token</label><input id="token" type="password" autocomplete="off" placeholder="Paste from .forge/owner-token" required minlength="24">
+    <p class="hint">Stored on this browser only. Never shared with the GitHub page.</p>
+    <button type="submit">Connect Forge <span aria-hidden="true">↗</span></button>
+  </form>
+  <p id="message" role="status" aria-live="polite"></p>
+  <section id="capabilities" hidden></section>
+  <footer><span class="dot"></span> Free models only. Human approval, always.</footer>
+</main><script src="options.js"></script></body></html>
