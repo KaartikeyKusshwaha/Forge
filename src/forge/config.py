@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     github_installation_id: int = 0
     github_webhook_secret: str = ""
     github_app_slug: str = ""
+    github_auth: str = "app"
+    allowed_repositories: str = ""
     # Deliberate opt-in: branch pushes can trigger privileged target CI.
     publish_enabled: bool = False
     llm_provider: str = "openrouter-free"
@@ -35,6 +37,8 @@ class Settings(BaseSettings):
 
     @property
     def github_ready(self) -> bool:
+        if self.github_auth == "cli":
+            return bool(self.allowed_repositories.strip())
         return bool(self.github_app_id and self.github_private_key_path and self.github_installation_id)
 
     @property

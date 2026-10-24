@@ -3,6 +3,7 @@
 import hashlib
 import io
 import re
+import subprocess
 import tarfile
 import time
 from pathlib import Path
@@ -35,6 +36,16 @@ class GitHub:
     def token(self, repo_id: int | None = None, write: bool = False) -> str:
         if not self.config.github_ready:
             raise GitHubError("Configure a GitHub App and installation before starting a repository run.")
+        if self.config.github_auth == "cli":
+            result = subprocess.run(
+                ["gh", "auth", "token", "--hostname", "github.com"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode or not result.stdout.strip():
+                raise GitHubError("GitHub CLI is not signed in. No credentials were returned.")
+            return result.stdout.strip()
         body = {
             "permissions": {
                 "contents": "write" if write else "read",
@@ -76,6 +87,21 @@ class GitHub:
 
     def repositories(self) -> list[dict]:
         token = self.token()
+        if self.config.github_auth == "cli":
+            selected = [r.strip() for r in self.config.allowed_repositories.split(",") if r.strip()]
+            result = []
+            for repo in selected:
+                self.validate_repo(repo)
+                r = self.request("GET", f"/repos/{repo}", token)
+                result.append(
+                    {
+                        "id": r["id"],
+                        "name": r["full_name"],
+                        "private": r["private"],
+                        "default_branch": r["default_branch"],
+                    }
+                )
+            return result
         result = []
         for page in range(1, 11):
             data = self.request("GET", f"/installation/repositories?per_page=100&page={page}", token)
@@ -94,6 +120,10 @@ class GitHub:
 
     def context(self, repo: str, issue: int) -> dict:
         self.validate_repo(repo)
+        if self.config.github_auth == "cli" and repo.lower() not in {
+            r.strip().lower() for r in self.config.allowed_repositories.split(",") if r.strip()
+        }:
+            raise GitHubError("Repository is outside the owner's explicit local allowlist.")
         token = self.token()
         metadata = self.request("GET", f"/repos/{repo}", token)
         if metadata.get("private"):
@@ -168,6 +198,10 @@ class GitHub:
         if time.time() > approval.get("expires", 0):
             raise PolicyError("Approval expired. Review the candidate again.")
         ctx = run["context"]
+        if self.config.github_auth == "cli" and run["repo"].lower() not in {
+            r.strip().lower() for r in self.config.allowed_repositories.split(",") if r.strip()
+        }:
+            raise PolicyError("Repository access was removed from the owner's allowlist.")
         token = self.token(ctx["repo_id"], write=True)
         root = f"/repos/{run['repo']}"
         current = self.request("GET", root + "/commits/" + ctx["branch"], token)
