@@ -1,9 +1,16 @@
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
 from forge.api import create_app
 from forge.config import Settings
 from forge.store import Store
+
+
+def pytest_configure(config):
+    if config.option.basetemp:
+        Path(config.option.basetemp).parent.mkdir(parents=True, exist_ok=True)
 
 
 @pytest.fixture
