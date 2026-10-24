@@ -4,6 +4,8 @@ Plan date: 25 October 2026. Status: proposed design, not an implementation recor
 
 **Later owner amendment:** build as a GitHub App plus browser extension, with a
 custom panel inside GitHub and no standalone website. Use only free model access.
+The later owner instruction removes Docker: current checks use isolated GitHub
+Actions VMs, and the owner confirmed their Groq account is on the Free plan.
 See [current implementation scope](IMPLEMENTATION.md) and [verified status](acceptance.md).
 The architecture and release boundaries below remain a planning reference where
 they do not conflict with those later decisions.

@@ -1,28 +1,35 @@
-# Pilot trust boundaries
+# Trust boundaries
 
-Trust: local owner, control-plane process, App key, Docker daemon/images, browser
-profile. Untrust: issue text, source, model output, target tests, and logs.
+Trusted: local owner, control-plane code and token, configured App or local CLI
+session, the trusted runner workflow/controller, and the browser profile.
+Untrusted: issues, repository files, model output, tests, and logs.
 
-- Loopback API with Host validation and bearer authentication; no permissive CORS.
-  Webhooks require their own HMAC and never authorize a run.
-- Background transport accepts fixed operations from GitHub and its own settings.
-  It rejects page-selected URLs and restricts token storage to trusted contexts.
-- Tokens never enter the GitHub content script. Source is escaped. Consequential
-  UI actions require trusted events; the server enforces approval independently.
-  A fully compromised GitHub page remains outside the overlay's threat boundary.
-- Target code executes only in non-root Linux containers: no network, capabilities,
-  host mounts, secrets, or Docker socket; read-only root, bounded scratch, CPU,
-  memory, PID, file size, command duration, and output.
-- The broker holds daemon access. Use a disposable worker host without production
-  workloads. Docker shares a kernel and is not a public hostile-code guarantee.
-- Distinct model roles do not prove independent reasoning or prevent dishonest
-  tests. A live external evaluation set remains necessary.
-- Fingerprints and expiring owner approvals gate every publication. The publisher
-  mints a fresh repository-scoped token and never merges, force-pushes, edits CI,
-  pushes the default branch, or deploys. Publishing may trigger target workflows.
-- Secret exclusions/scans are limited defenses. Public code may contain embedded
-  secrets; provider data terms still matter.
+- The API binds to loopback, checks Host, and requires a private bearer token.
+  Webhooks require HMAC and never authorize execution on their own.
+- Extension storage is limited to trusted contexts. A narrow background operation
+  registry keeps tokens out of GitHub page scripts. Source text is escaped, and
+  consequential controls require real input events plus server approval checks.
+- Personal CLI access is restricted by a server-side repository allowlist, checked
+  before reads and again before writes. App installation permissions remain a
+  separate supported authorization path. Neither is public multi-user auth.
+- A public GitHub-hosted VM is disposable per check. A systemd service runs source
+  as nobody with private networking, no capabilities, no-new-privileges, protected
+  system/home paths, and resource/time limits. The target receives no provider
+  key, Actions runtime token, GitHub credential, or control-plane database access.
+- Source snapshots and resulting logs are public. Private source is rejected.
+  Exclusions and likely-secret scans reduce risk but do not prove a public source
+  tree contains no embedded secrets. Logs remain untrusted when displayed.
+- Runner reports are matched to a random request ID and SHA-256 of the submitted
+  source snapshot. The trusted controller owns the report outside the target
+  workspace. A model statement is not a command result.
+- Same-model role separation is not independent correctness proof. External tests
+  and human review remain necessary. Malicious tests can still misrepresent their
+  own assertions; passing test counts are not a formal security assessment.
+- Human approval binds exact files, patch, base, checks, profile and review. Expiry,
+  changed candidates, moved bases, missing access, and unexpected remote branches
+  block publication. No automatic merge, deploy or default-branch push exists.
 
-Pending: live container enforcement, adversarial repository exercises, retention,
-backup/restore, Windows token ACL hardening, provider privacy review, multi-user
-auth, and actual GitHub publication acceptance.
+Remaining limits: no adversarial third-party security review, hosted multi-user
+auth, automated retention/backups, encrypted application storage, or universal
+repository/dependency support. This is an owner-operated engineering tool, not a
+public anonymous arbitrary-code service. No Docker is used.

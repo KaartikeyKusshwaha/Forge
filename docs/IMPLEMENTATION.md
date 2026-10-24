@@ -1,38 +1,55 @@
-# Implementation scope
+# Current implementation scope
 
-Latest owner decisions supersede the original standalone Next.js plan: Forge is
-a GitHub App plus a browser extension; all model access must be free.
+Owner decisions: Forge lives inside GitHub through a browser extension; no
+separate product website, free model access only, and no Docker work. These
+supersede the original master plan and earlier pilot notes.
 
-This version is a single-owner local pilot. One private bearer token authenticates
-the extension; one GitHub installation is configured on the server. Multi-user
-OAuth, team roles, private repositories, and public hosting are not included.
-SQLite is the local store. PostgreSQL can be configured via SQLAlchemy but has
-not been acceptance-tested; future schema-upgrade migrations are still pending.
+## Actual runtime
 
-Indexing is per-run lexical/symbol retrieval at a pinned SHA. Python uses AST;
-TypeScript uses best-effort symbol extraction. Persistent incremental indexing,
-semantic vectors, and complete dependency graphs are future work.
+The Manifest V3 extension has Progress, Changes, Checks, history, revisions,
+patch download, and exact-candidate approval. FastAPI and a durable Python worker
+run locally. Target code never runs in that control process or on this laptop.
 
-Planner, coder, tester, and reviewer are distinct provider calls. A deterministic
-worker enforces protected paths, call/token/time limits, and two repair attempts.
-It works from bounded retrieved context and whole-file edits, not arbitrary host
-shell tools. Model changes and actual runner evidence are kept separate.
+Repository access supports a GitHub App (guided manifest registration) or explicit
+personal mode using the owner's existing GitHub CLI sign-in and a local repository
+allowlist. Personal mode is not multi-user App authorization. It is enabled here
+only for the owned public Forge-Acceptance fixture repository. Both paths keep
+credentials outside page scripts, model contexts, and execution workers.
 
-The two sandbox images support pytest and Node's built-in runner with type
-stripping. They do not automatically install dependencies, execute target
-Dockerfiles, or run online integration tests. Image digest pinning and runtime
-resource-limit validation remain pending. The bundled demo runs only exact,
-trusted fixture bytes locally; its agent outputs are scripted and its checks real.
+Real checks dispatch `.github/workflows/forge-check.yml` on a trusted public runner
+repository. Each run receives a fresh GitHub-hosted VM; the controller launches
+source as a separate non-root systemd service with private networking, protected
+system/home paths, no capabilities or privileges, memory/task/CPU/file-size/time
+limits, and no model or GitHub credentials. There are no containers or local target
+execution fallbacks. The only local code check is an exact-byte bundled demo.
 
-Approval covers base SHA, proposed edits/diff, profile/policy, checks, and review.
-It is single-use and expires. A requested revision retires the previous candidate
-and queues a fresh run with owner feedback and fresh base discovery/validation.
+Public runner source and logs are visible on GitHub. Private repositories are
+blocked. Encoded compressed snapshots must fit GitHub's dispatch input limit
+(58 KB here); oversized snapshots fail clearly. The existing pytest and Node test
+profiles are supported. Automatic target dependency installation is not enabled.
 
-Worker crashes during analysis mark the run failed, requiring a fresh run. The
-publisher reconciles stored commit, branch, and PR identifiers on retry. This is
-safe recovery, not transparent resumption of every model/tool step.
+The active model is Qwen 3.8 27B on the owner's explicitly confirmed Groq Free
+plan. No account upgrade or paid fallback occurs. Free-plan quotas can stop work.
+Verified OpenRouter free entries and local models remain optional alternatives.
+The supplied API key is in ignored local configuration only.
 
-Automatic retention, encrypted storage, backup/restore, shared tenants, hosted
-workers, a benchmark dataset, and public extension-store distribution are not
-implemented. No local test implies a live model result, deployed service, registered
-GitHub App, published PR, or complete production security review.
+## Workflow and evidence
+
+Repository retrieval pins a base SHA, inventories text, parses Python symbols,
+and performs bounded lexical/symbol search. TypeScript symbols are best effort.
+The four agent roles make separate calls. Two repair cycles are permitted, and
+rate-limit retries are metered. Required checks, exact edits, base SHA, and review
+are sealed in a candidate fingerprint. Approval expires and is single-use. A
+revision retires the old candidate and requires fresh validation and approval.
+
+The publisher uses GitHub's Git database API and never runs target code, hooks,
+merges, force-pushes, default-branch updates, or deployments. Publishing can trigger
+repository CI; final confirmation explicitly acknowledges that effect.
+
+SQLite is used locally. PostgreSQL compatibility, public multi-user OAuth,
+semantic/incremental indexing, automated retention/backup, dependency preparation,
+enterprise features, and extension-store listing are not claimed as delivered.
+Worker crashes fail analysis safely; partial publication is reconciled using stored
+identifiers, rather than pretending every interrupted step resumes transparently.
+
+See acceptance.md for actual run links and the final owner-check procedure.

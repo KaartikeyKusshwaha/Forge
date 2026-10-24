@@ -1,0 +1,189 @@
+{
+  "provider": "Groq owner-confirmed Free plan",
+  "execution": "isolated public GitHub Actions VM; no Docker",
+  "cases": [
+    {
+      "issue": "https://github.com/KaartikeyKusshwaha/Forge-Acceptance/issues/1",
+      "run_id": "56c4444364655b308209f8c413db9bd3",
+      "model": "qwen/qwen3.8-27b",
+      "base_sha": "683ff962c5a8d27f9ab8d3c85ba71e012b8797ce",
+      "fingerprint": "434b2eed4d5f6a848df62e70c4ea355ee76ed97afb40331b0ef9486b03690d47",
+      "patch": "--- a/pagination.py\n+++ b/pagination.py\n@@ -1,4 +1,6 @@\n def validate_limit(limit: int) -> int:\n-    if limit < 0 or limit > 100:\n+    if not isinstance(limit, int) or isinstance(limit, bool):\n+        raise ValueError('limit must be an integer')\n+    if limit < 1 or limit > 100:\n         raise ValueError('limit must be from 1 to 100')\n     return limit\n--- a/test_pagination.py\n+++ b/test_pagination.py\n@@ -1,9 +1,46 @@\n import pytest\n from pagination import validate_limit\n+\n \n def test_valid_limit():\n     assert validate_limit(20) == 20\n \n+\n def test_negative():\n     with pytest.raises(ValueError):\n         validate_limit(-1)\n+\n+\n+def test_zero_rejected():\n+    with pytest.raises(ValueError):\n+        validate_limit(0)\n+\n+\n+def test_above_max_rejected():\n+    with pytest.raises(ValueError):\n+        validate_limit(101)\n+\n+\n+def test_below_min_rejected():\n+    with pytest.raises(ValueError):\n+        validate_limit(-5)\n+\n+\n+def test_non_integer_rejected():\n+    with pytest.raises(ValueError):\n+        validate_limit(1.5)\n+\n+\n+def test_boolean_rejected():\n+    with pytest.raises(ValueError):\n+        validate_limit(True)\n+    with pytest.raises(ValueError):\n+        validate_limit(False)\n+\n+\n+def test_min_bound_valid():\n+    assert validate_limit(1) == 1\n+\n+\n+def test_max_bound_valid():\n+    assert validate_limit(100) == 100\n",
+      "usage": {
+        "calls": 5,
+        "tokens": 11750,
+        "cost": 0,
+        "pricing": "Free-only model access"
+      },
+      "checks": [
+        {
+          "request_id": "a3f3d44847094252a47ca13d113d2d2a",
+          "snapshot_digest": "34dfa7bd5a8dcf4a049b9f79b5a7cb4c9588466b48a2ce48d24307704761ed70",
+          "command": "/opt/hostedtoolcache/Python/3.12.15/x64/bin/python -m pytest -q -p no:cacheprovider --junitxml=results.xml",
+          "exit_code": 0,
+          "count": 2,
+          "output": "..                                                                       [100%]\n--------- generated xml file: /tmp/forge-isolated-73ehurgl/results.xml ---------\n2 passed in 0.01s\n",
+          "phase": "baseline",
+          "image": "github-vm:c92d6db9cb9806bbcd23e1ad7597a25b6dbaf6c3",
+          "environment": "Disposable GitHub VM \u00b7 systemd isolation \u00b7 no network \u00b7 non-root",
+          "seconds": 16.36,
+          "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40144091477",
+          "status": "passed"
+        },
+        {
+          "request_id": "05c6fd3ebc30462f87bf756e162402c5",
+          "snapshot_digest": "4b9e8c7cd0b04232265c242212da3634945e2d7d79099337668d69fa15dbb476",
+          "command": "/opt/hostedtoolcache/Python/3.12.15/x64/bin/python -m pytest -q -p no:cacheprovider --junitxml=results.xml",
+          "exit_code": 1,
+          "count": 9,
+          "output": "..F..FF..                                                                [100%]\n=================================== FAILURES ===================================\n______________________________ test_zero_rejected ______________________________\n\n    def test_zero_rejected():\n>       with pytest.raises(ValueError):\nE       Failed: DID NOT RAISE <class 'ValueError'>\n\ntest_pagination.py:15: Failed\n__________________________ test_non_integer_rejected ___________________________\n\n    def test_non_integer_rejected():\n>       with pytest.raises(ValueError):\nE       Failed: DID NOT RAISE <class 'ValueError'>\n\ntest_pagination.py:30: Failed\n____________________________ test_boolean_rejected _____________________________\n\n    def test_boolean_rejected():\n>       with pytest.raises(ValueError):\nE       Failed: DID NOT RAISE <class 'ValueError'>\n\ntest_pagination.py:35: Failed\n--------- generated xml file: /tmp/forge-isolated-p9encanc/results.xml ---------\n=========================== short test summary info ============================\nFAILED test_pagination.py::test_zero_rejected - Failed: DID NOT RAISE <class ...\nFAILED test_pagination.py::test_non_integer_rejected - Failed: DID NOT RAISE ...\nFAILED test_pagination.py::test_boolean_rejected - Failed: DID NOT RAISE <cla...\n3 failed, 6 passed in 0.04s\n",
+          "phase": "regression_on_base",
+          "image": "github-vm:c92d6db9cb9806bbcd23e1ad7597a25b6dbaf6c3",
+          "environment": "Disposable GitHub VM \u00b7 systemd isolation \u00b7 no network \u00b7 non-root",
+          "seconds": 14.53,
+          "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40144122840",
+          "status": "failed"
+        },
+        {
+          "request_id": "48007f0b5f4b4d778a927677171d1232",
+          "snapshot_digest": "93c09a15dad9e7d0499fc3e983f042b55cca56e4dd0a84a24db309590c4c4c02",
+          "command": "/opt/hostedtoolcache/Python/3.12.15/x64/bin/python -m pytest -q -p no:cacheprovider --junitxml=results.xml",
+          "exit_code": 0,
+          "count": 9,
+          "output": ".........                                                                [100%]\n--------- generated xml file: /tmp/forge-isolated-pm_55w4q/results.xml ---------\n9 passed in 0.02s\n",
+          "phase": "candidate",
+          "image": "github-vm:c92d6db9cb9806bbcd23e1ad7597a25b6dbaf6c3",
+          "environment": "Disposable GitHub VM \u00b7 systemd isolation \u00b7 no network \u00b7 non-root",
+          "seconds": 14.69,
+          "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40144143520",
+          "status": "passed"
+        }
+      ],
+      "heldout_checks": [
+        {
+          "request_id": "a2e050c919d14e918923a7c28a06d7d2",
+          "snapshot_digest": "446b68672e6fb69f19171f6f2dc77a5d2a0a626cec9acfb1fb296ec9e67a6b5e",
+          "command": "/opt/hostedtoolcache/Python/3.12.15/x64/bin/python -m pytest -q -p no:cacheprovider --junitxml=results.xml",
+          "exit_code": 1,
+          "count": 8,
+          "output": "F.......                                                                 [100%]\n=================================== FAILURES ===================================\n_______________________________ test_invalid[0] ________________________________\n\nvalue = 0\n\n    @pytest.mark.parametrize('value', [0,-1,101])\n    def test_invalid(value):\n>       with pytest.raises(ValueError): validate_limit(value)\nE       Failed: DID NOT RAISE <class 'ValueError'>\n\ntest_external_acceptance.py:6: Failed\n--------- generated xml file: /tmp/forge-isolated-ppat2gna/results.xml ---------\n=========================== short test summary info ============================\nFAILED test_external_acceptance.py::test_invalid[0] - Failed: DID NOT RAISE <...\n1 failed, 7 passed in 0.03s\n",
+          "phase": "heldout_on_base",
+          "image": "github-vm:2039f73ce09a35c3df05c66779f5465ceeebf10c",
+          "environment": "Disposable GitHub VM \u00b7 systemd isolation \u00b7 no network \u00b7 non-root",
+          "seconds": 19.91,
+          "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40144574632",
+          "status": "failed"
+        },
+        {
+          "request_id": "7f3cf12e43424faa84887acf0c757321",
+          "snapshot_digest": "75ce52d9d8937f602ffa1d49e6213ab10a20c024a29608756db0b7502f0c2718",
+          "command": "/opt/hostedtoolcache/Python/3.12.15/x64/bin/python -m pytest -q -p no:cacheprovider --junitxml=results.xml",
+          "exit_code": 0,
+          "count": 15,
+          "output": "...............                                                          [100%]\n--------- generated xml file: /tmp/forge-isolated-2bc20uul/results.xml ---------\n15 passed in 0.02s\n",
+          "phase": "heldout_on_candidate",
+          "image": "github-vm:2039f73ce09a35c3df05c66779f5465ceeebf10c",
+          "environment": "Disposable GitHub VM \u00b7 systemd isolation \u00b7 no network \u00b7 non-root",
+          "seconds": 20.14,
+          "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40144598426",
+          "status": "passed"
+        }
+      ],
+      "passed": true,
+      "status": "awaiting_approval"
+    },
+    {
+      "issue": "https://github.com/KaartikeyKusshwaha/Forge-Acceptance/issues/2",
+      "run_id": "b28eb987295e5d5886aacfeb721bb880",
+      "model": "qwen/qwen3.8-27b",
+      "base_sha": "683ff962c5a8d27f9ab8d3c85ba71e012b8797ce",
+      "fingerprint": "3f59680fb63a655bc926b86d02485a5df5db3796da34f31628650a0ff234ccdf",
+      "patch": "--- a/price.test.ts\n+++ b/price.test.ts\n@@ -3,3 +3,5 @@\n import {computePrice} from './price.ts';\n test('default discount', () => assert.equal(computePrice(50),45));\n test('explicit discount', () => assert.equal(computePrice(100,20),80));\n+test('explicit zero discount', () => assert.equal(computePrice(50,0),50));\n+test('fractional discount', () => assert.equal(computePrice(100,12.5),87.5));\n--- a/price.ts\n+++ b/price.ts\n@@ -1,4 +1,4 @@\n export function computePrice(price: number, discount?: number): number {\n-  const rate = discount || 10;\n+  const rate = discount ?? 10;\n   return price * (1 - rate / 100);\n-}\n+}\n\\ No newline at end of file\n",
+      "usage": {
+        "calls": 4,
+        "tokens": 6706,
+        "cost": 0,
+        "pricing": "Free-only model access"
+      },
+      "checks": [
+        {
+          "request_id": "4e2a4f4ac971485ca9cd646868958a1b",
+          "snapshot_digest": "34dfa7bd5a8dcf4a049b9f79b5a7cb4c9588466b48a2ce48d24307704761ed70",
+          "command": "/opt/hostedtoolcache/node/22.23.3/x64/bin/node --experimental-strip-types --test price.test.ts",
+          "exit_code": 0,
+          "count": 2,
+          "output": "TAP version 13\n# Subtest: default discount\nok 1 - default discount\n  ---\n  duration_ms: 0.846868\n  type: 'test'\n  ...\n# Subtest: explicit discount\nok 2 - explicit discount\n  ---\n  duration_ms: 0.139299\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 120.224066\n",
+          "phase": "baseline",
+          "image": "github-vm:5ed4386df8f7a81db54c6038b8ff6490e7dfc639",
+          "environment": "Disposable GitHub VM \u00b7 systemd isolation \u00b7 no network \u00b7 non-root",
+          "seconds": 19.73,
+          "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40144302986",
+          "status": "passed"
+        },
+        {
+          "request_id": "e58f648bb28942a0aa2bf3008364c2c8",
+          "snapshot_digest": "41d44e30b744b0c43659a8b3e9aca161e60f4128d5b291e95fd41c563158f976",
+          "command": "/opt/hostedtoolcache/node/22.23.3/x64/bin/node --experimental-strip-types --test price.test.ts",
+          "exit_code": 1,
+          "count": 4,
+          "output": "TAP version 13\n# Subtest: default discount\nok 1 - default discount\n  ---\n  duration_ms: 1.220849\n  type: 'test'\n  ...\n# Subtest: explicit discount\nok 2 - explicit discount\n  ---\n  duration_ms: 0.179365\n  type: 'test'\n  ...\n# Subtest: explicit zero discount\nnot ok 3 - explicit zero discount\n  ---\n  duration_ms: 1.06008\n  type: 'test'\n  location: '/tmp/forge-isolated-v8c82zmv/price.test.ts:6:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    45 !== 50\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 50\n  actual: 45\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///tmp/forge-isolated-v8c82zmv/price.test.ts:6:45)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ...\n# Subtest: fractional discount\nok 4 - fractional discount\n  ---\n  duration_ms: 0.174366\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 3\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 124.29024\n",
+          "phase": "regression_on_base",
+          "image": "github-vm:5ed4386df8f7a81db54c6038b8ff6490e7dfc639",
+          "environment": "Disposable GitHub VM \u00b7 systemd isolation \u00b7 no network \u00b7 non-root",
+          "seconds": 14.09,
+          "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40144332102",
+          "status": "failed"
+        },
+        {
+          "request_id": "56422956df5b4ea0b74b3b27fd378425",
+          "snapshot_digest": "646988b9bf24fdadeabb9232a9b5c624d4d36d4e49dc03b0c7f878e008c53059",
+          "command": "/opt/hostedtoolcache/node/22.23.3/x64/bin/node --experimental-strip-types --test price.test.ts",
+          "exit_code": 0,
+          "count": 4,
+          "output": "TAP version 13\n# Subtest: default discount\nok 1 - default discount\n  ---\n  duration_ms: 0.895809\n  type: 'test'\n  ...\n# Subtest: explicit discount\nok 2 - explicit discount\n  ---\n  duration_ms: 0.135234\n  type: 'test'\n  ...\n# Subtest: explicit zero discount\nok 3 - explicit zero discount\n  ---\n  duration_ms: 0.135854\n  type: 'test'\n  ...\n# Subtest: fractional discount\nok 4 - fractional discount\n  ---\n  duration_ms: 0.120722\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 99.809897\n",
+          "phase": "candidate",
+          "image": "github-vm:5ed4386df8f7a81db54c6038b8ff6490e7dfc639",
+          "environment": "Disposable GitHub VM \u00b7 systemd isolation \u00b7 no network \u00b7 non-root",
+          "seconds": 19.95,
+          "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40144352900",
+          "status": "passed"
+        }
+      ],
+      "heldout_checks": [
+        {
+          "request_id": "e6bc56f7cf844c9fbea24f5d65622a72",
+          "snapshot_digest": "d4e413edd41cfe3febb65258368221045cbcd6099dd849c4ac3774e86e57e645",
+          "command": "/opt/hostedtoolcache/node/22.23.3/x64/bin/node --experimental-strip-types --test external.test.ts price.test.ts",
+          "exit_code": 1,
+          "count": 6,
+          "output": "TAP version 13\n# Subtest: zero is explicit\nnot ok 1 - zero is explicit\n  ---\n  duration_ms: 1.621332\n  type: 'test'\n  location: '/tmp/forge-isolated-nxxm0kdb/external.test.ts:4:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    45 !== 50\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 50\n  actual: 45\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///tmp/forge-isolated-nxxm0kdb/external.test.ts:4:39)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.start (node:internal/test_runner/test:944:17)\n    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)\n  ...\n# Subtest: default still works\nok 2 - default still works\n  ---\n  duration_ms: 0.199405\n  type: 'test'\n  ...\n# Subtest: fractional discount\nok 3 - fractional discount\n  ---\n  duration_ms: 0.141096\n  type: 'test'\n  ...\n# Subtest: full discount\nok 4 - full discount\n  ---\n  duration_ms: 0.135244\n  type: 'test'\n  ...\n# Subtest: default discount\nok 5 - default discount\n  ---\n  duration_ms: 0.928958\n  type: 'test'\n  ...\n# Subtest: explicit discount\nok 6 - explicit discount\n  ---\n  duration_ms: 0.15925\n  type: 'test'\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 5\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 802.405334\n",
+          "phase": "heldout_on_base",
+          "image": "github-vm:2039f73ce09a35c3df05c66779f5465ceeebf10c",
+          "environment": "Disposable GitHub VM \u00b7 systemd isolation \u00b7 no network \u00b7 non-root",
+          "seconds": 20.03,
+          "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40144574998",
+          "status": "failed"
+        },
+        {
+          "request_id": "7234d47a449d4f7e9e56707bfe271783",
+          "snapshot_digest": "e57486f940f3087453b0389c222663ce018f4992e2e0acc66e4cbb71bd038b4e",
+          "command": "/opt/hostedtoolcache/node/22.23.3/x64/bin/node --experimental-strip-types --test external.test.ts price.test.ts",
+          "exit_code": 0,
+          "count": 8,
+          "output": "TAP version 13\n# Subtest: zero is explicit\nok 1 - zero is explicit\n  ---\n  duration_ms: 1.786393\n  type: 'test'\n  ...\n# Subtest: default still works\nok 2 - default still works\n  ---\n  duration_ms: 0.265159\n  type: 'test'\n  ...\n# Subtest: fractional discount\nok 3 - fractional discount\n  ---\n  duration_ms: 0.229271\n  type: 'test'\n  ...\n# Subtest: full discount\nok 4 - full discount\n  ---\n  duration_ms: 0.229713\n  type: 'test'\n  ...\n# Subtest: default discount\nok 5 - default discount\n  ---\n  duration_ms: 1.186103\n  type: 'test'\n  ...\n# Subtest: explicit discount\nok 6 - explicit discount\n  ---\n  duration_ms: 0.187323\n  type: 'test'\n  ...\n# Subtest: explicit zero discount\nok 7 - explicit zero discount\n  ---\n  duration_ms: 0.179267\n  type: 'test'\n  ...\n# Subtest: fractional discount\nok 8 - fractional discount\n  ---\n  duration_ms: 0.160883\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 8\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 288.869653\n",
+          "phase": "heldout_on_candidate",
+          "image": "github-vm:2039f73ce09a35c3df05c66779f5465ceeebf10c",
+          "environment": "Disposable GitHub VM \u00b7 systemd isolation \u00b7 no network \u00b7 non-root",
+          "seconds": 20.03,
+          "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40144598964",
+          "status": "passed"
+        }
+      ],
+      "passed": true,
+      "status": "awaiting_approval"
+    }
+  ],
+  "passed": true,
+  "publication": "Not performed; waiting for exact human approval",
+  "note": "Two owned fixture issues are smoke acceptance, not a reliability benchmark."
+}

@@ -137,8 +137,11 @@
 
   function approvalFooter() {
     const r = state.run;
-    if (!r) return `<footer class="bottom-bar"><span class="small-dot"></span> YOUR REPOSITORY. YOUR CALL.<span>v0.1</span></footer>`;
+    if (!r) return `<footer class="bottom-bar"><span class="small-dot"></span> YOUR REPOSITORY. YOUR CALL.<span>v0.2</span></footer>`;
     if (r.status === "awaiting_approval") {
+      if (r.mode !== "demo" && r.approval_expires_at && Date.now() / 1000 > r.approval_expires_at) {
+        return `<footer class="approval-footer"><div class="approval-label">${icon("clock", 16)}This review window expired. Fresh validation is needed.</div>${button("refresh", "Refresh proposal and checks", "primary wide", "arrow")}<div class="footer-actions">${button("reject", "Reject", "text-button")}${button("download", "Download old patch", "text-button")}</div></footer>`;
+      }
       return `<footer class="approval-footer"><div class="approval-label">${icon("shield", 16)}${r.mode === "demo" ? "Demo ready. Nothing will be published." : "Your approval unlocks a commit and draft PR."}</div>
       ${state.revision ? `<label class="revision-label" for="forge-feedback">What should change?</label><textarea id="forge-feedback" rows="3" maxlength="4000" placeholder="Describe the correction or missing requirement…"></textarea>${button("submit-revision", "Request a fresh proposal", "secondary wide", "arrow")}` : ""}
       ${state.confirm && r.mode !== "demo" ? `<label class="consent"><input type="checkbox" id="forge-ci-consent">I reviewed the diff and checks. Publishing may trigger repository CI.</label>` : ""}
@@ -223,6 +226,11 @@
       const feedback = root.querySelector("#forge-feedback")?.value.trim() || "";
       if (feedback.length < 10) throw new Error("Describe the requested change in at least 10 characters.");
       const next = await call("revision", {id: state.run.id, body: {feedback, request_key: crypto.randomUUID()}});
+      state.revision = false; state.confirm = false; state.tab = "progress";
+      await call("active", {id: next.id}); return loadRun(next.id);
+    }
+    if (action === "refresh") {
+      const next = await call("revision", {id: state.run.id, body: {feedback: "Refresh this proposal against the current base and rerun all required checks before human approval.", request_key: crypto.randomUUID()}});
       state.revision = false; state.confirm = false; state.tab = "progress";
       await call("active", {id: next.id}); return loadRun(next.id);
     }

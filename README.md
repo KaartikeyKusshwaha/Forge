@@ -4,16 +4,19 @@
 executed checks. Approve an exact candidate before Forge creates a commit, branch,
 or draft pull request. There is **no separate product website**.
 
+Owner: start with [your final check](docs/OWNER_TEST.md). The prepared real
+Python and TypeScript proposals are waiting for your review.
+
 Manifest V3 extension + Python/FastAPI API + durable Python worker. Light/dark
 themes, keyboard navigation, mobile review, Progress / Changes / Checks views.
 
 **Status: local pilot implementation.** The bundled sample works with real Python
 regression checks, scripted agent steps, and no model calls or GitHub writes.
-Real GitHub/model/Docker/publisher adapters are implemented but need live
-acceptance. See [verified status](docs/acceptance.md).
+Real public GitHub issues have reached human review using Groq Qwen and isolated
+GitHub Actions checks. Publishing stays gated on approval of the exact candidate. See [verified status](docs/acceptance.md).
 
 Public source: [KaartikeyKusshwaha/Forge](https://github.com/KaartikeyKusshwaha/Forge).
-Backend, actual Linux Docker execution, and the real unpacked extension passed
+Backend and the real unpacked extension passed
 [GitHub CI](https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40142462930).
 
 ## Start locally
@@ -83,8 +86,9 @@ FORGE_LLM_API_KEY=
 
 No model is claimed universally best. This coding-specific 7B option is sized for
 the owner's 8 GB GPU; hosted free models may be stronger but have account quotas.
-The reproducible generation harness is `scripts/evaluate-local.py`, with execution
-of its output reserved for isolated runners, never the control host.
+The reproducible generation harness is `scripts/evaluate-local.py`. Its first
+small-model attempts and limitations remain recorded under `evaluation/results`;
+they are not a reliability benchmark. The active owner setup uses Groq Qwen 3.8.
 
 ## Real repository runs
 

@@ -46,7 +46,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     async def lifespan(app):
         yield
 
-    app = FastAPI(title="Forge", version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Forge", version="0.2.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
     app.state.store = db
 
@@ -78,7 +78,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
 
     @app.get("/health")
     def health():
-        return {"service": "forge", "version": "0.1.0", "status": "ok"}
+        return {"service": "forge", "version": "0.2.0", "status": "ok"}
 
     @app.get("/api/status", dependencies=[Depends(authenticated)])
     def status():
@@ -144,7 +144,14 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
 
     @app.get("/api/runs/{run_id}", dependencies=[Depends(authenticated)])
     def run_detail(run_id: str):
-        return {**get_run(run_id), "events": db.events(run_id)}
+        run = get_run(run_id)
+        return {
+            **run,
+            "events": db.events(run_id),
+            "approval_expires_at": run["ready_at"] + config.approval_ttl_seconds
+            if run.get("ready_at")
+            else None,
+        }
 
     @app.get("/api/runs/{run_id}/events", dependencies=[Depends(authenticated)])
     async def events(run_id: str, request: Request, after: int = 0, last_event_id: str = Header(default="")):

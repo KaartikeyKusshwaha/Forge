@@ -1,11 +1,13 @@
 {
   "name": "forge-github-companion",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "scripts": {
     "test:extension": "node tests/extension.e2e.cjs",
     "test:background": "node --test tests/background.test.cjs",
     "check:extension": "node --check extension/content.js && node --check extension/background.js && node --check extension/options.js"
   },
-  "devDependencies": {"playwright": "1.62.1"}
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
 }

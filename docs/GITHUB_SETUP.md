@@ -34,8 +34,8 @@ GitHub registration still needs an owner-confirmed browser session.
 5. Set `FORGE_GITHUB_APP_ID` using the App settings.
 6. Install on **selected repositories only**, starting with a small public fixture.
    Set `FORGE_GITHUB_INSTALLATION_ID` from the installation settings URL.
-7. Add a free model key, build both Docker images, and restart Forge. Connection
-   settings should report GitHub, model, and Docker configured.
+7. Add a free model key and sign in to GitHub CLI for isolated runner dispatch.
+   Restart Forge; Connection should report GitHub, model, and runner ready.
 8. Start an issue and inspect the candidate. Publishing stays off until you review
    the repository CI and set `FORGE_PUBLISH_ENABLED=true`.
 
@@ -60,3 +60,15 @@ installation trial is still required.
 [App registration](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app),
 [installation tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation),
 [runner security](https://docs.github.com/en/actions/concepts/security/compromised-runners)
+
+## Explicit personal mode
+
+To use your existing local GitHub CLI session instead of registering an App, set
+`FORGE_GITHUB_AUTH=cli` and a comma-separated `FORGE_ALLOWED_REPOSITORIES` list.
+Only those public repositories are accessible through Forge. The owner account
+stays server-side. This is separate from App installation authorization.
+
+The runner workflow executes on the public repository configured by
+`FORGE_RUNNER_REPOSITORY` and `FORGE_RUNNER_REF`; that account needs workflow
+dispatch and artifact-read access. Standard public GitHub-hosted execution is the
+free route. No Docker engine, VM installation on the laptop, or paid host is used.
