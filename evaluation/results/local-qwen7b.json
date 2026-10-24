@@ -1,0 +1,86 @@
+{
+  "model": "forge-qwen-coder-7b",
+  "api_cost": 0,
+  "validation_status": "pending_real_docker_execution",
+  "cases": [
+    {
+      "id": "python-limit-zero",
+      "profile": "python",
+      "plan": {
+        "summary": "Modify the validate_limit function to reject a page size of zero and add regression tests.",
+        "steps": [
+          "Update the validate_limit function to raise a ValueError if the limit is zero.",
+          "Add a new regression test to validate that validate_limit raises a ValueError when the limit is zero."
+        ],
+        "acceptance": [
+          "The validate_limit function should raise a ValueError if the limit is zero.",
+          "The existing tests should pass without modification."
+        ],
+        "files": [
+          "pagination.py",
+          "test_pagination.py"
+        ],
+        "needs_input": false
+      },
+      "summary": "Modify the validate_limit function to reject a page size of zero and add regression tests.",
+      "files": {
+        "pagination.py": "def validate_limit(limit: int) -> int:\n    if limit < 1 or limit > 100:\n        raise ValueError('limit must be from 1 to 100')\n    return limit\n",
+        "test_pagination.py": "import pytest\nfrom pagination import validate_limit\n\ndef test_valid_limit():\n    assert validate_limit(20) == 20\n\ndef test_negative():\n    with pytest.raises(ValueError):\n        validate_limit(-1)\n\ndef test_zero():\n    with pytest.raises(ValueError):\n        validate_limit(0)\n\ndef test_too_large():\n    with pytest.raises(ValueError):\n        validate_limit(101)"
+      },
+      "review": {
+        "summary": "The patch changes the validation range from 0 to 100 and adds regression tests for valid and invalid limits.",
+        "findings": [
+          "The validation range should start from 1 instead of 0."
+        ],
+        "acceptable": false
+      },
+      "patch": "--- a/pagination.py\n+++ b/pagination.py\n@@ -1,4 +1,4 @@\n def validate_limit(limit: int) -> int:\n-    if limit < 0 or limit > 100:\n+    if limit < 1 or limit > 100:\n         raise ValueError('limit must be from 1 to 100')\n     return limit\n--- a/test_pagination.py\n+++ b/test_pagination.py\n@@ -7,3 +7,11 @@\n def test_negative():\n     with pytest.raises(ValueError):\n         validate_limit(-1)\n+\n+def test_zero():\n+    with pytest.raises(ValueError):\n+        validate_limit(0)\n+\n+def test_too_large():\n+    with pytest.raises(ValueError):\n+        validate_limit(101)\n\\ No newline at end of file\n",
+      "usage": {
+        "calls": 4,
+        "tokens": 2265
+      },
+      "seconds": 41.41
+    },
+    {
+      "id": "typescript-discount-zero",
+      "profile": "typescript",
+      "plan": {
+        "summary": "Fix the computePrice function to correctly handle a zero discount and preserve fractional discounts. Add regression tests to ensure correctness.",
+        "steps": [
+          "Modify the computePrice function to correctly handle a zero discount by ensuring it uses the default discount of 10% when no discount is provided.",
+          "Preserve fractional discounts by ensuring the discount rate is applied correctly.",
+          "Add regression tests to verify that computePrice behaves as expected with different discount values, including zero and fractional values."
+        ],
+        "acceptance": [
+          "computePrice(50, 0) should return 50, as a zero discount should leave the price unchanged.",
+          "computePrice(100, 10) should return 90, as a 10% discount should reduce the price by 10.",
+          "computePrice(25, 0.25) should return 18.75, as a 25% discount should reduce the price by 25%."
+        ],
+        "files": [
+          "price.ts",
+          "price.test.ts"
+        ],
+        "needs_input": false
+      },
+      "summary": "Fix the computePrice function to correctly handle a zero discount and preserve fractional discounts. Add regression tests to ensure correctness.",
+      "files": {
+        "price.ts": "export function computePrice(price: number, discount?: number): number {\n  const rate = discount === 0 ? 0 : discount || 10;\n  return price * (1 - rate / 100);\n}\n",
+        "price.test.ts": "import {test} from 'node:test';\nimport assert from 'node:assert/strict';\nimport {computePrice} from './price.ts';\ntest('default discount', () => assert.equal(computePrice(50), 45));\ntest('explicit discount', () => assert.equal(computePrice(100, 20), 80));\ntest('zero discount', () => assert.equal(computePrice(50, 0), 50));\ntest('fractional discount', () => assert.equal(computePrice(25, 0.25), 18.75));\ntest('zero percent discount should leave the price unchanged', () => assert.equal(computePrice(50, 0), 50));\n"
+      },
+      "review": {
+        "summary": "The patch adds regression tests for different discount scenarios and corrects the implementation to handle zero percent discounts correctly.",
+        "findings": [
+          "The test for 'zero discount' is redundant as it is already covered by 'zero percent discount should leave the price unchanged'.",
+          "The test for 'fractional discount' is unnecessary as it is already covered by 'explicit discount' with a fractional value."
+        ],
+        "acceptable": true
+      },
+      "patch": "--- a/price.test.ts\n+++ b/price.test.ts\n@@ -1,5 +1,8 @@\n import {test} from 'node:test';\n import assert from 'node:assert/strict';\n import {computePrice} from './price.ts';\n-test('default discount', () => assert.equal(computePrice(50),45));\n-test('explicit discount', () => assert.equal(computePrice(100,20),80));\n+test('default discount', () => assert.equal(computePrice(50), 45));\n+test('explicit discount', () => assert.equal(computePrice(100, 20), 80));\n+test('zero discount', () => assert.equal(computePrice(50, 0), 50));\n+test('fractional discount', () => assert.equal(computePrice(25, 0.25), 18.75));\n+test('zero percent discount should leave the price unchanged', () => assert.equal(computePrice(50, 0), 50));\n--- a/price.ts\n+++ b/price.ts\n@@ -1,4 +1,4 @@\n export function computePrice(price: number, discount?: number): number {\n-  const rate = discount || 10;\n+  const rate = discount === 0 ? 0 : discount || 10;\n   return price * (1 - rate / 100);\n }\n",
+      "usage": {
+        "calls": 4,
+        "tokens": 3007
+      },
+      "seconds": 29.84
+    }
+  ]
+}

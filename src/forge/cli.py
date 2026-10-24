@@ -5,11 +5,13 @@ import secrets
 import threading
 from pathlib import Path
 
+import httpx
 import uvicorn
 
 from forge.api import create_app
 from forge.config import Settings
 from forge.llm import free_models
+from forge.sandbox import DockerSandbox
 from forge.setup import load_registration
 from forge.store import Store
 from forge.worker import serve_worker
@@ -33,7 +35,7 @@ def local_config() -> Settings:
 
 def main():
     parser = argparse.ArgumentParser(description="Forge local control plane. No standalone product website.")
-    parser.add_argument("command", choices=["serve", "worker", "models", "setup"])
+    parser.add_argument("command", choices=["serve", "worker", "models", "setup", "doctor"])
     parser.add_argument("--port", type=int, default=8787)
     parser.add_argument(
         "--with-worker", action="store_true", help="Local development only: run the worker in a thread."
@@ -47,6 +49,37 @@ def main():
         return
     if args.command == "models":
         print(json.dumps(free_models(), indent=2))
+        return
+    if args.command == "doctor":
+        model_online = False
+        if config.llm_provider == "local":
+            try:
+                from forge.llm import verify_free
+
+                verify_free(config)
+                response = httpx.get(config.llm_base_url.rstrip("/") + "/models", timeout=5)
+                model_online = response.status_code == 200 and any(
+                    m.get("id") == config.llm_model for m in response.json().get("data", [])
+                )
+            except (httpx.HTTPError, ValueError):
+                pass
+        print(
+            json.dumps(
+                {
+                    "github_app_configured": config.github_ready,
+                    "model_configured": config.llm_ready,
+                    "model": config.llm_model,
+                    "provider": config.llm_provider,
+                    "local_model_online": model_online,
+                    "linux_docker_available": DockerSandbox.available(),
+                    "publishing_enabled": config.publish_enabled,
+                    "token_file": str((config.data_dir / "owner-token").resolve()),
+                    "extension": str(Path("extension").resolve()),
+                    "next": "Pair the extension, complete Connect GitHub App, and verify Docker before real issue runs.",
+                },
+                indent=2,
+            )
+        )
         return
     store = Store(config.database_url)
     if args.command == "worker":

@@ -60,3 +60,12 @@ jobs:
       - run: uv run pytest tests/test_sandbox_live.py -q --basetemp=.forge/docker-tests
         env:
           FORGE_TEST_DOCKER: '1'
+      - name: Validate frozen free-model candidates against evaluator tests
+        if: hashFiles('evaluation/results/local-qwen7b.json') != ''
+        run: uv run python scripts/verify-model-evaluation.py --input evaluation/results/local-qwen7b.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sandbox-evidence
+          path: test-results/
+          if-no-files-found: ignore

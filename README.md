@@ -62,6 +62,28 @@ until provider data handling is reviewed.
 [limits](https://openrouter.ai/docs/api/reference/limits),
 [DeepSeek pricing](https://api-docs.deepseek.com/quick_start/pricing/)
 
+### Local Qwen coding model on Windows
+
+On a suitable NVIDIA/Vulkan GPU, run `./scripts/start-local-model.ps1` in a separate
+terminal. This downloads the official Apache-2.0 Qwen2.5-Coder-7B-Instruct Q4_K_M
+model (4.68 GB) and an MIT llama.cpp runtime, verifies pinned SHA-256 checksums,
+and starts a loopback-only model endpoint. There is no paid API or account.
+The model and runtime remain in ignored `.forge/models/`.
+
+Set these values in `.env` and restart Forge:
+
+```dotenv
+FORGE_LLM_PROVIDER=local
+FORGE_LLM_BASE_URL=http://127.0.0.1:8788/v1
+FORGE_LLM_MODEL=forge-qwen-coder-7b
+FORGE_LLM_API_KEY=
+```
+
+No model is claimed universally best. This coding-specific 7B option is sized for
+the owner's 8 GB GPU; hosted free models may be stronger but have account quotas.
+The reproducible generation harness is `scripts/evaluate-local.py`, with execution
+of its output reserved for Docker, never the control host.
+
 ## Real repository runs
 
 Follow [GitHub App setup](docs/GITHUB_SETUP.md). Add its ID, key path, and installation

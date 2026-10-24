@@ -71,3 +71,43 @@ def test_downloaded_diff_handles_newline_and_new_or_deleted_files():
     assert "-old\n\\ No newline at end of file\n+new\n" in diff
     assert "--- /dev/null\n+++ b/b.py\n" in diff
     assert "+++ /dev/null\n" in diff_files({"a.py": "old\n"}, {})
+
+
+def test_local_provider_omits_empty_authorization_header(monkeypatch):
+    captured = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def post(self, url, headers, json):
+            captured.append(headers)
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": {"content": '{"summary":"ok"}'}}],
+                    "usage": {"total_tokens": 20},
+                },
+            )
+
+    monkeypatch.setattr("forge.llm.httpx.Client", Client)
+    config = Settings(
+        llm_provider="local",
+        llm_base_url="http://127.0.0.1:8788/v1",
+        llm_model="fixture",
+        llm_api_key="",
+        _env_file=None,
+    )
+    assert (
+        Provider(config, {"calls": 0, "tokens": 0}, lambda _: None, lambda: False).ask("planner", "Plan", {})[
+            "summary"
+        ]
+        == "ok"
+    )
+    assert captured == [{}]
