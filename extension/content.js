@@ -190,6 +190,14 @@
       state.service = await call("status");
       const active = await call("active");
       if (active.id) await loadRun(active.id);
+      else {
+        const ctx = context();
+        if (ctx.repo && ctx.issue) {
+          const recent = (await call("list")).runs.find(r => r.mode === "github" && r.repo.toLowerCase() === ctx.repo.toLowerCase()
+            && r.issue === ctx.issue && r.status === "awaiting_approval");
+          if (recent) {await call("active", {id: recent.id}); await loadRun(recent.id);}
+        }
+      }
     } catch(error) { state.error = error.message; }
     render();
   }

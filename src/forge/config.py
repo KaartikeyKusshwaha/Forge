@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,12 +9,12 @@ class Settings(BaseSettings):
 
     data_dir: Path = Path(".forge")
     database_url: str = "sqlite:///.forge/forge.sqlite3"
-    owner_token: str = ""
+    owner_token: str = Field(default="", repr=False)
     demo_enabled: bool = True
     github_app_id: str = ""
     github_private_key_path: str = ""
     github_installation_id: int = 0
-    github_webhook_secret: str = ""
+    github_webhook_secret: str = Field(default="", repr=False)
     github_app_slug: str = ""
     github_auth: str = "app"
     allowed_repositories: str = ""
@@ -21,7 +22,7 @@ class Settings(BaseSettings):
     publish_enabled: bool = False
     llm_provider: str = "openrouter-free"
     llm_base_url: str = "https://openrouter.ai/api/v1"
-    llm_api_key: str = ""
+    llm_api_key: str = Field(default="", repr=False)
     llm_model: str = "auto"
     groq_free_plan_confirmed: bool = False
     max_output_tokens: int = 3000

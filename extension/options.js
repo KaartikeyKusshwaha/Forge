@@ -11,7 +11,7 @@ async function inspect() {
   box.hidden = false;
   box.replaceChildren();
   for (const line of [
-    `GitHub App: ${data.github ? "configured" : "not connected yet"}`,
+    `GitHub access: ${data.github ? data.github_auth === "cli" ? "connected · owner CLI" : "connected · App" : "not connected yet"}`,
     `Free model: ${data.model ? data.model_name : "API key needed · demo available"}`,
     `Isolated GitHub runner: ${data.runner ? "available" : "sign in to GitHub CLI"}`,
     `Publishing: ${data.publishing ? "enabled after approval" : "disabled"}`

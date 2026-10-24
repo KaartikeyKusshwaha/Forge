@@ -84,6 +84,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     def status():
         return {
             "github": config.github_ready,
+            "github_auth": config.github_auth,
             "model": config.llm_ready,
             "model_name": config.llm_model,
             "free_only": True,
