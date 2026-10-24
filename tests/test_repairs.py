@@ -24,6 +24,9 @@ def simulated_live_loop(monkeypatch, config, *, persistent_failure=False):
         def available():
             return True
 
+        def __init__(self, *_):
+            pass
+
         def check(self, files, phase, cancelled, profile):
             return DemoSandbox().check(files, phase, cancelled)
 
@@ -63,7 +66,7 @@ def simulated_live_loop(monkeypatch, config, *, persistent_failure=False):
             }
 
     monkeypatch.setattr("forge.worker.GitHub", GithubFixture)
-    monkeypatch.setattr("forge.worker.DockerSandbox", SandboxFixture)
+    monkeypatch.setattr("forge.worker.ActionsSandbox", SandboxFixture)
     monkeypatch.setattr("forge.worker.Provider", ProviderFixture)
     monkeypatch.setattr("forge.worker.verify_free", lambda _: {"id": "fixture/model:free"})
     config.llm_api_key = "fixture-not-a-real-key"

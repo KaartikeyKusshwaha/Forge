@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://openrouter.ai/api/v1"
     llm_api_key: str = ""
     llm_model: str = "auto"
+    groq_free_plan_confirmed: bool = False
+    max_output_tokens: int = 3000
+    executor: str = "github-actions"
+    runner_repository: str = "KaartikeyKusshwaha/Forge"
+    runner_ref: str = "main"
+    runner_timeout_seconds: int = 600
     max_tokens: int = 100_000
     max_calls: int = 20
     max_run_seconds: int = 1200

@@ -11,11 +11,11 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from forge.actions import ActionsSandbox
 from forge.config import Settings
 from forge.github import GitHub, GitHubError
 from forge.llm import free_models
 from forge.policy import PolicyError, fingerprint
-from forge.sandbox import DockerSandbox
 from forge.setup import AppSetup
 from forge.store import Conflict, Store
 
@@ -89,7 +89,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
             "provider": config.llm_provider,
             "demo": config.demo_enabled,
             "publishing": config.publish_enabled,
-            "docker": DockerSandbox.available(),
+            "runner": ActionsSandbox.available(),
         }
 
     @app.get("/api/models", dependencies=[Depends(authenticated)])
@@ -120,10 +120,10 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
                     409,
                     "Configure the GitHub App and a free model key first. The built-in demo is available now.",
                 )
-            if not DockerSandbox.available():
+            if not ActionsSandbox.available():
                 raise HTTPException(
                     409,
-                    "Install a Linux Docker engine and build the sandbox images. Host execution is disabled.",
+                    "Sign in to GitHub CLI to use isolated GitHub Actions checks. Host execution is disabled.",
                 )
         repo, issue = ("forge-demo/sample-api", 42) if body.mode == "demo" else (body.repo, body.issue)
         return db.create(

@@ -13,7 +13,7 @@ async function inspect() {
   for (const line of [
     `GitHub App: ${data.github ? "configured" : "not connected yet"}`,
     `Free model: ${data.model ? data.model_name : "API key needed · demo available"}`,
-    `Docker execution: ${data.docker ? "available" : "not installed or unavailable"}`,
+    `Isolated GitHub runner: ${data.runner ? "available" : "sign in to GitHub CLI"}`,
     `Publishing: ${data.publishing ? "enabled after approval" : "disabled"}`
   ]) { const p = document.createElement("div"); p.textContent = line; box.append(p); }
 }

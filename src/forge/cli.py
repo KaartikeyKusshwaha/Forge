@@ -8,10 +8,10 @@ from pathlib import Path
 import httpx
 import uvicorn
 
+from forge.actions import ActionsSandbox
 from forge.api import create_app
 from forge.config import Settings
 from forge.llm import free_models
-from forge.sandbox import DockerSandbox
 from forge.setup import load_registration
 from forge.store import Store
 from forge.worker import serve_worker
@@ -71,11 +71,11 @@ def main():
                     "model": config.llm_model,
                     "provider": config.llm_provider,
                     "local_model_online": model_online,
-                    "linux_docker_available": DockerSandbox.available(),
+                    "github_actions_runner_available": ActionsSandbox.available(),
                     "publishing_enabled": config.publish_enabled,
                     "token_file": str((config.data_dir / "owner-token").resolve()),
                     "extension": str(Path("extension").resolve()),
-                    "next": "Pair the extension, complete Connect GitHub App, and verify Docker before real issue runs.",
+                    "next": "Pair the extension, complete Connect GitHub App, and verify the GitHub Actions runner before real issue runs.",
                 },
                 indent=2,
             )

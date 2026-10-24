@@ -63,7 +63,7 @@
   function landing() {
     const ctx = context();
     const title = document.querySelector('[data-testid="issue-title"], .js-issue-title, bdi.markdown-title')?.textContent?.trim();
-    const ready = state.service?.github && state.service?.model && state.service?.docker;
+    const ready = state.service?.github && state.service?.model && state.service?.runner;
     return `<div class="landing">
       <div class="intro-visual" aria-hidden="true"><span class="orbit one"></span><span class="orbit two"></span><span class="orbit three"></span><span class="hero-mark">${icon("forge", 38)}</span><i class="orbit-dot a"></i><i class="orbit-dot b"></i></div>
       <div class="eyebrow">A THOUGHTFUL PAIR OF HANDS</div>
@@ -76,7 +76,7 @@
       ${ctx.issue ? button("start", "Start Forge", "primary wide", "arrow") : ""}
       <div class="mini-flow"><span>Explore</span><i>→</i><span>Build</span><i>→</i><span>Verify</span><i>→</i><strong>You approve</strong></div>
       <div class="safety-note">${icon("shield", 17)}<span>No commits or pull requests until you approve the exact changes.</span></div>
-      ${!ready ? `<div class="setup-note"><span class="small-dot"></span><p>${state.service ? "Repository runs need a GitHub App, a free model key, and Docker." : "Connect to your local Forge service to get started."}</p>${button("options", "Connection", "text-button")}</div>` : ""}
+      ${!ready ? `<div class="setup-note"><span class="small-dot"></span><p>${state.service ? "Repository runs need a GitHub App, a free model and GitHub Actions access." : "Connect to your local Forge service to get started."}</p>${button("options", "Connection", "text-button")}</div>` : ""}
       <div class="demo-card"><span class="demo-symbol">${icon("play", 18)}</span><div><strong>Take a small test drive</strong><p>A bundled issue. Real checks. No GitHub writes.</p></div>${button("demo", '<span class="sr-only">Run bundled demo</span>', "icon-button", "arrow")}</div>
     </div>`;
   }

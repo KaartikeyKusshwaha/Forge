@@ -4,12 +4,13 @@ import uuid
 
 from pydantic import BaseModel, Field
 
+from forge.actions import ActionsSandbox
 from forge.config import Settings
 from forge.github import GitHub, GitHubError, demo_context
 from forge.index import retrieve
 from forge.llm import Provider, verify_free
 from forge.policy import PolicyError, apply_edits, seal_candidate
-from forge.sandbox import DemoSandbox, DockerSandbox, demo_candidate
+from forge.sandbox import DemoSandbox, demo_candidate
 from forge.store import Conflict, Store
 
 
@@ -118,11 +119,13 @@ class Worker:
                 raise PolicyError(
                     "A free model API key and model selection are required. Paid endpoints are disabled."
                 )
-            if not DockerSandbox.available():
-                raise PolicyError("Linux Docker is unavailable. No repository code will run on the host.")
+            if not ActionsSandbox.available():
+                raise PolicyError(
+                    "GitHub Actions runner is unavailable. No repository code will run on the host."
+                )
             context = github.context(run["repo"], run["issue"])
             files = github.snapshot(context)
-            sandbox = DockerSandbox()
+            sandbox = ActionsSandbox(self.config)
             model = verify_free(self.config)["id"]
         if run.get("feedback"):
             context["owner_feedback"] = run["feedback"]
@@ -137,7 +140,7 @@ class Worker:
         ):
             save(
                 limitations=[
-                    "Only dependencies preinstalled in the selected image are available. No automatic package installation."
+                    "Checks use the isolated GitHub runner profile. Automatic dependency installation is not enabled yet."
                 ]
             )
         stage("indexing", "Finding implementation files, symbols, and nearby tests.")

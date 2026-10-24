@@ -47,13 +47,35 @@ def free_models() -> list[dict]:
 
 
 def verify_free(config: Settings) -> dict:
+    if config.llm_provider == "groq-free":
+        if not config.groq_free_plan_confirmed or config.llm_base_url != "https://api.groq.com/openai/v1":
+            raise PolicyError("Groq requires owner confirmation of its Free plan and the official endpoint.")
+        response = httpx.get(
+            config.llm_base_url + "/models",
+            headers={"Authorization": "Bearer " + config.llm_api_key},
+            timeout=20,
+        )
+        if response.status_code != 200:
+            raise PolicyError("Could not verify the available Groq models. Check the configured key.")
+        available = {m["id"] for m in response.json()["data"] if m.get("active", True)}
+        preference = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+        model = (
+            next((m for m in preference if m in available), None)
+            if config.llm_model == "auto"
+            else config.llm_model
+        )
+        if model not in available or model not in preference:
+            raise PolicyError("Select an available supported text model on the confirmed Groq Free plan.")
+        return {"id": model, "parameters": ["response_format"], "free_plan_confirmed": True}
     if config.llm_provider == "local":
         url = urlparse(config.llm_base_url)
         if url.scheme != "http" or url.hostname not in {"127.0.0.1", "localhost", "::1"}:
             raise PolicyError("Local models must use a loopback HTTP endpoint.")
         return {"id": config.llm_model, "parameters": ["response_format"], "local": True}
     if config.llm_provider != "openrouter-free" or config.llm_base_url != "https://openrouter.ai/api/v1":
-        raise PolicyError("Only verified OpenRouter :free models or loopback local models are allowed.")
+        raise PolicyError(
+            "Only verified free models, an owner-confirmed Groq Free plan, or loopback local models are allowed."
+        )
     catalog = free_models()
     match = (
         catalog[0]
@@ -79,7 +101,7 @@ class Provider:
         selected = verify_free(self.config)
         text = json.dumps(context, ensure_ascii=False)[:80_000]
         # A conservative character-count reservation bounds even unusually dense tokenizations.
-        reservation = len(SYSTEM + instructions + text) + 6000
+        reservation = len(SYSTEM + instructions + text) + self.config.max_output_tokens
         if (
             self.usage["calls"] >= self.config.max_calls
             or self.usage["tokens"] + reservation > self.config.max_tokens
@@ -93,12 +115,14 @@ class Provider:
                 {"role": "system", "content": SYSTEM + f"\nRole: {role}\n" + instructions},
                 {"role": "user", "content": text},
             ],
-            "max_tokens": 6000,
+            "max_tokens": self.config.max_output_tokens,
         }
         if "response_format" in selected.get("parameters", []):
             body["response_format"] = {"type": "json_object"}
         if self.config.llm_provider == "openrouter-free":
             body["provider"] = {"max_price": {"prompt": 0, "completion": 0}}
+        if self.config.llm_provider == "groq-free" and selected["id"].startswith("qwen/"):
+            body["reasoning_format"] = "hidden"
         response = None
         for attempt in range(3):
             if self.cancelled():
@@ -126,7 +150,12 @@ class Provider:
                 if attempt == 2:
                     raise PolicyError("Model provider connection failed.") from None
             if attempt < 2:
-                for _ in range(2**attempt * 5):
+                retry_after = response.headers.get("retry-after", "") if response is not None else ""
+                try:
+                    delay = max(2**attempt, min(float(retry_after), 65))
+                except ValueError:
+                    delay = 2**attempt
+                for _ in range(int(delay * 5)):
                     if self.cancelled():
                         raise PolicyError("Run cancelled.")
                     time.sleep(0.2)
