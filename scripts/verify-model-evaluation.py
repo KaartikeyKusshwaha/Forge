@@ -1,9 +1,10 @@
-"""Execute frozen local-model outputs in real Docker plus evaluator-owned tests."""
+"""Execute frozen local-model outputs in isolated GitHub Actions plus evaluator-owned tests."""
 import argparse
 import json
 from pathlib import Path
 
-from forge.sandbox import DockerSandbox
+from forge.actions import ActionsSandbox
+from forge.config import Settings
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input", required=True)
@@ -12,8 +13,8 @@ args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 cases = {case["id"]: case for case in json.loads((root / "evaluation/cases.json").read_text())}
 generated = json.loads(Path(args.input).read_text())
-report = {"model": generated["model"], "api_cost": generated["api_cost"], "execution": "real Docker", "cases": []}
-sandbox = DockerSandbox()
+report = {"model": generated["model"], "api_cost": generated["api_cost"], "execution": "isolated GitHub Actions", "cases": []}
+sandbox = ActionsSandbox(Settings())
 for candidate in generated["cases"]:
     case = cases[candidate["id"]]
     if candidate.get("error") or "files" not in candidate:

@@ -30,6 +30,7 @@ class Plan(BaseModel):
     acceptance: list[str] = Field(min_length=1, max_length=12)
     files: list[str] = Field(max_length=20)
     needs_input: bool = False
+    question: str = Field(default="", max_length=2000)
 
 
 class Review(BaseModel):
@@ -69,7 +70,13 @@ class Worker:
             else:
                 error = f"{type(exc).__name__}: run stopped safely. Inspect the local server diagnostics."
             current = self.store.get(run["id"])
-            status = "cancelled" if current["cancel"] else "failed"
+            status = (
+                "cancelled"
+                if current["cancel"]
+                else "needs_input"
+                if current.get("plan", {}).get("needs_input")
+                else "failed"
+            )
             if "base branch moved" in error:
                 status = "stale"
             try:
@@ -135,6 +142,10 @@ class Worker:
             if any(p.endswith((".ts", ".js")) for p in files) and not any(p.endswith(".py") for p in files)
             else "python"
         )
+        if run.get("requested_profile") in {"python", "typescript"}:
+            profile = run["requested_profile"]
+        elif "typescript" in (context["title"] + " " + context["body"]).lower():
+            profile = "typescript"
         if mode != "demo" and (
             "package.json" in files or "pyproject.toml" in files or "requirements.txt" in files
         ):
@@ -193,16 +204,25 @@ class Worker:
             plan = Plan.model_validate(
                 provider.ask(
                     "planner",
-                    "Return {summary, steps: string[], acceptance: string[], files: string[], needs_input: boolean}. Cite only supplied paths. Mark needs_input for ambiguous or protected tasks.",
+                    "Return {summary, steps: string[], acceptance: string[], files: string[], needs_input: boolean, question: string}. Cite only supplied paths. Set needs_input=true ONLY if implementation is blocked by a specific missing requirement or protected edit; state the exact question. Routine human approval before publication and the absence of future test results do not block coding. If the issue is clear, needs_input=false and question=''. A separate runner will execute tests.",
                     evidence,
                 )
             )
+            if plan.needs_input and not plan.question.strip():
+                plan = Plan.model_validate(
+                    provider.ask(
+                        "planner",
+                        "Your earlier plan marked needs_input but identified no question. Return the same full schema with a concrete question ONLY if implementation is actually blocked. Approval before publication is already enforced and is not missing information. Otherwise needs_input=false and question=''.",
+                        {**evidence, "previous_plan": plan.model_dump()},
+                    )
+                )
             if any(path not in files for path in plan.files):
                 raise PolicyError("Planner cited a file absent from the pinned repository.")
         save(plan=plan.model_dump())
         if plan.needs_input:
             raise PolicyError(
-                "Planner needs a clearer issue or a change outside the protected scope. Review the plan."
+                "Planner needs input: "
+                + (plan.question or "A clearer issue or a change outside the protected scope is required.")
             )
         stage("coding", "Coder is preparing a minimal candidate; no commits are created.")
         if mode == "demo":

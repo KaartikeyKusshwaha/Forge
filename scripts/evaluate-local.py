@@ -1,4 +1,4 @@
-"""Generate real local-model candidates. Execution happens separately in Docker, never on this host."""
+"""Generate real local-model candidates. Execution happens separately on isolated GitHub runners, never on this host."""
 import argparse
 import json
 import time
@@ -17,7 +17,7 @@ parser.add_argument("--output", default=".forge/model-evaluation.json")
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 config = Settings(llm_provider="local", llm_base_url=args.url, llm_model=args.model, llm_api_key="", _env_file=None)
-report = {"model": args.model, "api_cost": 0, "validation_status": "pending_real_docker_execution", "cases": []}
+report = {"model": args.model, "api_cost": 0, "validation_status": "pending_isolated_execution", "cases": []}
 for case in json.loads((root / "evaluation/cases.json").read_text()):
     start = time.monotonic()
     usage = {"calls": 0, "tokens": 0}

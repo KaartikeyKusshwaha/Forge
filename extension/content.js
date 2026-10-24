@@ -49,7 +49,7 @@
     snapshotting: "Reading repository", indexing: "Exploring code", baseline: "Checking the baseline", planning: "Planning the change",
     coding: "Writing the change", testing: "Preparing regression tests", validating: "Running checks", reviewing: "Reviewing the proposal",
     repairing: "Repairing the candidate", queued: "Queued", publishing: "Publishing approved changes", failed: "Needs attention",
-    cancelled: "Cancelled", rejected: "Proposal rejected", stale: "Base branch changed"}[status] || status);
+    cancelled: "Cancelled", rejected: "Proposal rejected", stale: "Base branch changed", needs_input: "Needs your input"}[status] || status);
   const context = () => {
     const match = location.pathname.match(/^\/([\w.-]+)\/([\w.-]+)(?:\/(issues|pull)\/(\d+))?/);
     return match ? {repo: `${match[1]}/${match[2]}`, issue: match[3] === "issues" ? Number(match[4]) : null} : {repo: null, issue: null};

@@ -18,8 +18,8 @@ Backend, actual Linux Docker execution, and the real unpacked extension passed
 
 ## Start locally
 
-Requirements: Python 3.12+, uv, Node 22+, pnpm, Chrome or Edge. Docker is required
-only for actual repository execution.
+Requirements: Python 3.12+, uv, Node 22+, pnpm, Chrome or Edge, and GitHub CLI.
+No Docker is used. Repository checks run on disposable public GitHub Actions VMs.
 
 ```powershell
 uv sync --extra dev --frozen
@@ -46,6 +46,8 @@ Forge never imports `OPENAI_API_KEY` or other paid provider keys. It supports:
 
 - OpenRouter entries currently ending in `:free`, with every catalog price zero.
   Catalog verification happens before each call; paid fallback is blocked.
+- An owner-confirmed Groq Free plan, using Qwen 3.8 27B when available. Forge
+  never upgrades the account; free quotas can stop a run.
 - A loopback API-compatible local model server, such as Ollama. This uses your own
   compute and has no model API fee.
 
@@ -82,25 +84,26 @@ FORGE_LLM_API_KEY=
 No model is claimed universally best. This coding-specific 7B option is sized for
 the owner's 8 GB GPU; hosted free models may be stronger but have account quotas.
 The reproducible generation harness is `scripts/evaluate-local.py`, with execution
-of its output reserved for Docker, never the control host.
+of its output reserved for isolated runners, never the control host.
 
 ## Real repository runs
 
-Follow [GitHub App setup](docs/GITHUB_SETUP.md). Add its ID, key path, and installation
-ID to `.env`. With a Linux Docker engine, build:
+Follow [GitHub App setup](docs/GITHUB_SETUP.md), or use explicit personal CLI mode.
+GitHub CLI must be signed in for remote check dispatch:
 
 Alternatively, select **Connect GitHub App** in the extension's Connection page:
 the guided manifest flow saves those values locally after GitHub confirmation.
 
 ```powershell
-docker build -f infra/sandbox/Dockerfile.python -t forge-python:local infra/sandbox
-docker build -f infra/sandbox/Dockerfile.node -t forge-node:local infra/sandbox
+gh auth status
+uv run forge doctor
 ```
 
 Restart, open an issue in a selected public repository, and choose **Start Forge**.
 The configured free provider receives the issue and relevant public source. The
-initial images support pytest and Node's built-in runner. Dependencies must already
-exist in the image; automatic package installation is not implemented.
+isolated runners support pytest and Node's built-in runner. Automatic target
+dependency installation is not enabled. The runner repository must be public for
+this free execution route; source snapshots and check logs are therefore public.
 
 Publishing defaults to off. Review target CI before enabling
 `FORGE_PUBLISH_ENABLED=true`: branch pushes and draft PRs may trigger workflows
@@ -136,11 +139,29 @@ src/forge/store.py      Durable jobs, leases, optimistic updates, events
 src/forge/worker.py     Planner → coder → tester → reviewer, bounded repairs
 src/forge/github.py     App tokens, snapshots, Git database and draft PR publisher
 src/forge/llm.py        Free-only catalog policy, provider calls, reservations
-src/forge/sandbox.py    Docker broker and exact-byte trusted demo
+src/forge/actions.py    Isolated GitHub VM dispatch, evidence, cancellation
+src/forge/sandbox.py    Exact-byte trusted demo
 src/forge/policy.py     Paths, protected edits, patch limits, candidate fingerprints
-infra/sandbox/         Non-root, network-disabled Python and Node images
+scripts/actions-check.py Non-root, offline systemd execution controller
 tests/                 API, policy, worker, provider, publication, browser tests
 ```
 
 Read the [implementation scope](docs/IMPLEMENTATION.md),
 [threat model](docs/threat-model.md), and original [master plan](docs/MASTER_PLAN.md).
+
+## Personal installation without creating an App
+
+The GitHub App adapter remains available. For a personal workspace, Forge can
+also use the existing GitHub CLI sign-in with a strict local repository allowlist:
+
+```dotenv
+FORGE_GITHUB_AUTH=cli
+FORGE_ALLOWED_REPOSITORIES=your-user/your-test-repository
+```
+
+Only listed public repositories can be read or published through Forge. The CLI
+credential stays server-side and never reaches target tests or the GitHub page.
+This is explicit owner mode, not multi-user App authorization or a silent fallback.
+Checks use `.github/workflows/forge-check.yml` on the configured public runner
+repository. Compressed source must fit GitHub's dispatch payload (58 KB encoded);
+oversized repositories receive a clear refusal rather than host execution.

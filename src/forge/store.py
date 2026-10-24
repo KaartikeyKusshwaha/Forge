@@ -58,7 +58,16 @@ class Delivery(Base):
     created: Mapped[float] = mapped_column(Float)
 
 
-TERMINAL = {"awaiting_approval", "pr_opened", "demo_complete", "failed", "cancelled", "rejected", "stale"}
+TERMINAL = {
+    "awaiting_approval",
+    "pr_opened",
+    "demo_complete",
+    "failed",
+    "needs_input",
+    "cancelled",
+    "rejected",
+    "stale",
+}
 
 
 class Conflict(Exception):

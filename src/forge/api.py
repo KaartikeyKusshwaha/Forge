@@ -24,6 +24,7 @@ class NewRun(BaseModel):
     repo: str = Field(max_length=200, pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     issue: int = Field(ge=1, le=2**31)
     mode: Literal["github", "demo"] = "github"
+    profile: Literal["auto", "python", "typescript"] = "auto"
     request_key: str = Field(min_length=12, max_length=100)
 
 
@@ -131,6 +132,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
             issue,
             dict(
                 mode=body.mode,
+                requested_profile=body.profile,
                 title="Reject a page size of zero" if body.mode == "demo" else f"Issue #{body.issue}",
                 usage={"calls": 0, "tokens": 0, "cost": 0},
                 checks=[],
