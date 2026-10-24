@@ -17,6 +17,7 @@ function allowedRequest(message) {
   switch (message.action) {
     case "status": return ["GET", "/api/status"];
     case "models": return ["GET", "/api/models"];
+    case "github-setup": return ["POST", "/api/setup/github"];
     case "list": return ["GET", "/api/runs"];
     case "create": {
       const data = message.body;
@@ -72,6 +73,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       const data = await chrome.storage.local.get(["baseUrl", "token"]);
       return {baseUrl: data.baseUrl || "http://127.0.0.1:8787", paired: Boolean(data.token)};
     }
+    if (message.action === "github-setup" && !trustedOptions) throw new Error("Start GitHub setup from Connection settings.");
     const [method, path, body, text] = allowedRequest(message);
     const config = await chrome.storage.local.get(["baseUrl", "token"]);
     if (!config.token) throw new Error("Connect Forge first. Open Connection and paste your local owner token.");
@@ -87,6 +89,13 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       throw new Error(typeof data.detail === "string" ? data.detail : `Request failed (${response.status}).`);
+    }
+    if (message.action === "github-setup") {
+      const data = await response.json();
+      const url = new URL(data.url);
+      if (url.origin !== "http://127.0.0.1:8787" || url.pathname !== "/setup/github") throw new Error("Unexpected setup address.");
+      await chrome.tabs.create({url: url.href});
+      return {opened: true};
     }
     return text ? {text: await response.text()} : response.json();
   })().then(data => respond({ok: true, data})).catch(error => respond({ok: false, error: error.message}));

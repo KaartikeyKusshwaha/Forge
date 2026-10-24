@@ -22,14 +22,19 @@ class GitHub:
     def __init__(self, config: Settings):
         self.config = config
 
-    def token(self, repo_id: int | None = None, write: bool = False) -> str:
-        if not self.config.github_ready:
-            raise GitHubError("Configure a GitHub App and installation before starting a repository run.")
+    def app_request(self, method: str, path: str, **kwargs):
+        if not self.config.github_app_id or not self.config.github_private_key_path:
+            raise GitHubError("Configure a GitHub App first.")
         now = int(time.time())
         key = Path(self.config.github_private_key_path).read_text()
         app_token = jwt.encode(
             {"iat": now - 60, "exp": now + 540, "iss": self.config.github_app_id}, key, algorithm="RS256"
         )
+        return self.request(method, path, app_token, **kwargs)
+
+    def token(self, repo_id: int | None = None, write: bool = False) -> str:
+        if not self.config.github_ready:
+            raise GitHubError("Configure a GitHub App and installation before starting a repository run.")
         body = {
             "permissions": {
                 "contents": "write" if write else "read",
@@ -39,10 +44,9 @@ class GitHub:
         }
         if repo_id:
             body["repository_ids"] = [repo_id]
-        return self.request(
+        return self.app_request(
             "POST",
             f"/app/installations/{self.config.github_installation_id}/access_tokens",
-            app_token,
             json=body,
         )["token"]
 

@@ -12,6 +12,10 @@ regression checks, scripted agent steps, and no model calls or GitHub writes.
 Real GitHub/model/Docker/publisher adapters are implemented but need live
 acceptance. See [verified status](docs/acceptance.md).
 
+Public source: [KaartikeyKusshwaha/Forge](https://github.com/KaartikeyKusshwaha/Forge).
+Backend, actual Linux Docker execution, and the real unpacked extension passed
+[GitHub CI](https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40142462930).
+
 ## Start locally
 
 Requirements: Python 3.12+, uv, Node 22+, pnpm, Chrome or Edge. Docker is required
@@ -62,6 +66,9 @@ until provider data handling is reviewed.
 
 Follow [GitHub App setup](docs/GITHUB_SETUP.md). Add its ID, key path, and installation
 ID to `.env`. With a Linux Docker engine, build:
+
+Alternatively, select **Connect GitHub App** in the extension's Connection page:
+the guided manifest flow saves those values locally after GitHub confirmation.
 
 ```powershell
 docker build -f infra/sandbox/Dockerfile.python -t forge-python:local infra/sandbox

@@ -4,6 +4,22 @@ This pilot has one local owner and one server-configured GitHub App installation
 It does not use your GitHub password or a personal access token. Public multi-user
 OAuth onboarding is not included.
 
+## Guided local setup
+
+After pairing the extension, open its Connection settings and choose **Connect
+GitHub App**. The local one-time setup form opens GitHub's official App-manifest
+flow with the required permissions. Confirm registration, then choose repositories
+and install it. The generated key returns directly to `.forge/github-app.pem`;
+App/installation configuration is saved privately in `.forge/github-registration.json`.
+No key is shown in the page, extension, repository, or server logs. Publishing
+stays disabled. This setup flow uses the default local port 8787.
+
+An interrupted install can be resumed with the same button. The manual procedure
+below remains available. The guided protocol is covered by local tests; real
+GitHub registration still needs an owner-confirmed browser session.
+
+## Manual setup
+
 1. In GitHub **Settings → Developer settings → GitHub Apps**, register an App with
    a unique name. Use your source repository URL as the required homepage; no
    separate product website is needed.

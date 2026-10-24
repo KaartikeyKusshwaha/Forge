@@ -115,7 +115,9 @@ class Provider:
                 with httpx.Client(timeout=90) as client:
                     response = client.post(
                         self.config.llm_base_url.rstrip("/") + "/chat/completions",
-                        headers={"Authorization": "Bearer " + self.config.llm_api_key},
+                        headers={"Authorization": "Bearer " + self.config.llm_api_key}
+                        if self.config.llm_api_key
+                        else {},
                         json=body,
                     )
                 if response.status_code not in {429, 502, 503, 504}:

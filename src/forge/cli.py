@@ -10,6 +10,7 @@ import uvicorn
 from forge.api import create_app
 from forge.config import Settings
 from forge.llm import free_models
+from forge.setup import load_registration
 from forge.store import Store
 from forge.worker import serve_worker
 
@@ -27,7 +28,7 @@ def local_config() -> Settings:
     # Never consume OPENAI_API_KEY or another paid provider key implicitly.
     if not config.llm_api_key:
         config.llm_api_key = os.environ.get("OPENROUTER_API_KEY", "")
-    return config
+    return load_registration(config)
 
 
 def main():

@@ -16,6 +16,7 @@ from forge.github import GitHub, GitHubError
 from forge.llm import free_models
 from forge.policy import PolicyError, fingerprint
 from forge.sandbox import DockerSandbox
+from forge.setup import AppSetup
 from forge.store import Conflict, Store
 
 
@@ -51,6 +52,9 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     def authenticated(authorization: str = Header(default="")):
         if not config.owner_token or not hmac.compare_digest(authorization, "Bearer " + config.owner_token):
             raise HTTPException(401, "Connect the extension using the local owner token.")
+
+    setup = AppSetup(config)
+    setup.routes(app, authenticated)
 
     def get_run(run_id):
         try:

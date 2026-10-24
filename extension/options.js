@@ -6,6 +6,7 @@ const call = async (action, values = {}) => {
 const message = document.querySelector("#message");
 async function inspect() {
   const data = await call("status");
+  document.querySelector("#github-setup").hidden = data.github;
   const box = document.querySelector("#capabilities");
   box.hidden = false;
   box.replaceChildren();
@@ -27,6 +28,16 @@ document.querySelector("#connection").addEventListener("submit", async event => 
     document.querySelector("#token").value = "";
     message.textContent = "Connected. Open a GitHub issue and choose Forge.";
   } catch (error) { message.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+document.querySelector("#connect-github").addEventListener("click", async event => {
+  if (!event.isTrusted) return;
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await call("github-setup");
+    message.textContent = "Complete App registration and repository selection on GitHub, then return here.";
+  } catch(error) { message.textContent = error.message; }
   finally { button.disabled = false; }
 });
 (async () => {

@@ -2,6 +2,20 @@
 
 This is a local pilot, not a production or live GitHub acceptance claim.
 
+## GitHub verification update
+
+Public repository: https://github.com/KaartikeyKusshwaha/Forge . Commit `2dfe31f`
+passed [CI run 40142462930](https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40142462930):
+47 backend tests, the actual installed Manifest V3 extension flow (no test bridge),
+and three real Linux Docker checks. The latter exercised Python, TypeScript, and
+non-root/read-only/network-denied execution. The extension artifact's report
+explicitly says `Real unpacked extension`, with no page errors. This supersedes
+the earlier bridge-only and Docker-unverified entries below for Linux CI.
+
+An actual local Qwen3-1.7B call also returned validated planner JSON without any
+API fee. It exposed and led to fixing an empty-local-key Authorization-header bug.
+This one call establishes adapter function, not coding quality or task success.
+
 | Check | Observed result |
 | --- | --- |
 | Python policy/API/workflow/provider/publisher tests | 47 passed. Includes actual trusted-fixture regression execution, repairs, revision invalidation, duplicate claims, webhook HMAC/replay, authentication, tampering, expiry, moved bases, and PR reconciliation. |

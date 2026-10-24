@@ -1,0 +1,20 @@
+[
+  {
+    "id": "python-limit-zero", "profile": "python",
+    "issue": "Reject a page size of zero in validate_limit. Raise ValueError unless the limit is an integer from 1 to 100 inclusive. Preserve valid behavior. Add regression tests.",
+    "files": {
+      "pagination.py": "def validate_limit(limit: int) -> int:\n    if limit < 0 or limit > 100:\n        raise ValueError('limit must be from 1 to 100')\n    return limit\n",
+      "test_pagination.py": "import pytest\nfrom pagination import validate_limit\n\ndef test_valid_limit():\n    assert validate_limit(20) == 20\n\ndef test_negative():\n    with pytest.raises(ValueError):\n        validate_limit(-1)\n"
+    },
+    "external": {"test_external_acceptance.py": "import pytest\nfrom pagination import validate_limit\n\n@pytest.mark.parametrize('value', [0,-1,101])\ndef test_invalid(value):\n    with pytest.raises(ValueError): validate_limit(value)\n\n@pytest.mark.parametrize('value', [1,20,100])\ndef test_valid(value):\n    assert validate_limit(value)==value\n"}
+  },
+  {
+    "id": "typescript-discount-zero", "profile": "typescript",
+    "issue": "A discount of zero percent should leave the price unchanged. computePrice(50,0) currently returns 45 because zero is replaced by the default. The default discount when omitted should remain 10 percent. Preserve fractional discounts. Add regression tests.",
+    "files": {
+      "price.ts": "export function computePrice(price: number, discount?: number): number {\n  const rate = discount || 10;\n  return price * (1 - rate / 100);\n}\n",
+      "price.test.ts": "import {test} from 'node:test';\nimport assert from 'node:assert/strict';\nimport {computePrice} from './price.ts';\ntest('default discount', () => assert.equal(computePrice(50),45));\ntest('explicit discount', () => assert.equal(computePrice(100,20),80));\n"
+    },
+    "external": {"external.test.ts": "import {test} from 'node:test';\nimport assert from 'node:assert/strict';\nimport {computePrice} from './price.ts';\ntest('zero is explicit', () => assert.equal(computePrice(50,0),50));\ntest('default still works', () => assert.equal(computePrice(50),45));\ntest('fractional discount', () => assert.equal(computePrice(200,2.5),195));\ntest('full discount', () => assert.equal(computePrice(50,100),0));\n"}
+  }
+]
