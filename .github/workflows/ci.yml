@@ -10,6 +10,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.12'
+          enable-cache: false
       - run: uv sync --extra dev --frozen
       - run: uv run ruff check src tests
       - run: uv run ruff format --check src tests
@@ -21,6 +22,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.12'
+          enable-cache: false
       - uses: pnpm/action-setup@v4
         with:
           version: 11
