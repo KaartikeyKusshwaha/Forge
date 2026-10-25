@@ -172,7 +172,7 @@ class Worker:
         ):
             save(
                 limitations=[
-                    "Checks use the isolated GitHub runner profile. Automatic dependency installation is not enabled yet."
+                    "Checks install declared Python dependencies and the project in an isolated disposable GitHub runner, then run tests offline."
                 ]
             )
         stage("indexing", "Finding implementation files, symbols, and nearby tests.")
@@ -196,7 +196,7 @@ class Worker:
         save(checks=checks)
         if baseline.get("exit_code") == 2:
             raise PolicyError(
-                "Baseline test collection failed. Review missing dependencies/import errors in Checks, then use Analyze failure with Groq Free for suggestions. No model-driven edits were attempted."
+                "Baseline setup or test collection failed. Review the sandbox setup and import errors in Checks. No model-driven edits were attempted."
             )
         if baseline["count"] == 0:
             raise PolicyError(

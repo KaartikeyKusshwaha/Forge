@@ -147,6 +147,13 @@ class ActionsSandbox:
                         seconds=round(time.monotonic() - start, 2),
                         run_url=remote["html_url"],
                     )
+                    if result.get("setup", {}).get("output"):
+                        result["output"] = (
+                            "DEPENDENCY SETUP\n"
+                            + result["setup"]["output"]
+                            + "\nTESTS\n"
+                            + result.get("output", "")
+                        )
                     result["status"] = (
                         "passed" if result["exit_code"] == 0 and result["count"] > 0 else "failed"
                     )

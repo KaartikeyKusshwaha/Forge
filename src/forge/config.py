@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     executor: str = "github-actions"
     runner_repository: str = "KaartikeyKusshwaha/Forge"
     runner_ref: str = "main"
-    runner_timeout_seconds: int = 600
+    runner_timeout_seconds: int = 900
     max_tokens: int = 100_000
     max_calls: int = 20
     max_run_seconds: int = 1200

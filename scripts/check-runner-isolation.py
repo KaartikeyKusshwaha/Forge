@@ -7,9 +7,13 @@ import os
 import runpy
 import uuid
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 python_tests = '''import os, socket, resource
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 def test_nonroot(): assert os.getuid() == 65534
 def test_secrets_absent():
     assert not any(k in os.environ for k in ('GROQ_API_KEY','FORGE_LLM_API_KEY','GITHUB_TOKEN','ACTIONS_RUNTIME_TOKEN'))
@@ -25,8 +29,16 @@ def test_private_home(): assert not os.access('/home/runner',os.R_OK)
 def test_file_size_limit(): assert resource.getrlimit(resource.RLIMIT_FSIZE)[0] <= 16*1024*1024
 '''
 node_tests = "import {test} from 'node:test';\nimport assert from 'node:assert/strict';\ntest('typescript executes',()=>assert.equal(2+3,5));\n"
+project_files = {
+    "pyproject.toml": '[build-system]\nrequires=["setuptools", "wheel"]\nbuild-backend="setuptools.build_meta"\n',
+    "setup.py": "import os,socket\nfrom setuptools import setup\nassert os.getuid()==65534\nassert not os.access('/home/runner',os.R_OK)\nassert not any(k in os.environ for k in ('GITHUB_TOKEN','ACTIONS_RUNTIME_TOKEN'))\ns=socket.socket();s.settimeout(1);assert s.connect_ex(('1.1.1.1',443))!=0;s.close()\nsetup(name='forge-sandbox-fixture',version='1.0',py_modules=['fixture_package'])\n",
+    "requirements.txt": "packaging>=24\n",
+    "fixture_package.py": "VALUE = 42\n",
+    "test_package.py": "import fixture_package,packaging\ndef test_installed_package(): assert fixture_package.VALUE == 42\n",
+}
 reports = []
 for profile, files, expected in [("python", {"test_isolation.py": python_tests}, 6),
+                                 ("python", project_files, 1),
                                  ("typescript", {"isolation.test.ts": node_tests}, 1)]:
     raw = json.dumps(files, sort_keys=True, separators=(",", ":")).encode()
     os.environ.update(FORGE_REQUEST_ID=uuid.uuid4().hex, FORGE_PROFILE=profile,
