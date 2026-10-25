@@ -15,6 +15,32 @@ Protected paths (workflows, dependencies, auth, migrations, secrets) cannot be e
 """
 
 
+def rejection_message(response, config):
+    status = response.status_code if response is not None else "unknown"
+    detail = ""
+    if response is not None:
+        try:
+            error = response.json().get("error", {})
+            detail = error.get("message", "") if isinstance(error, dict) else ""
+        except (ValueError, AttributeError):
+            pass
+    if not isinstance(detail, str):
+        detail = ""
+    for secret in (config.llm_api_key, config.owner_token):
+        if secret:
+            detail = detail.replace(secret, "[redacted]")
+    if "agentic harness" in detail.lower():
+        return (
+            f"Model access denied (HTTP {status}). {config.llm_model} is restricted to approved agent "
+            "applications, and the provider is not accepting Forge. Your key can be valid while this "
+            "model is blocked. Choose another verified free model in Connection settings. "
+            "No paid fallback was used."
+        )
+    return f"Model provider rejected the request (HTTP {status}). " + (
+        detail[:600] if detail else "Check model access and credentials in Connection settings."
+    )
+
+
 def free_models() -> list[dict]:
     try:
         response = httpx.get("https://openrouter.ai/api/v1/models", timeout=20)
@@ -198,6 +224,13 @@ class Provider:
                         if self.config.llm_api_key
                         else {}
                     )
+                    if self.config.llm_provider == "openrouter-free":
+                        headers.update(
+                            {
+                                "HTTP-Referer": "https://github.com/KaartikeyKusshwaha/Forge",
+                                "X-OpenRouter-Title": "Forge",
+                            }
+                        )
                     if self.config.llm_protocol == "anthropic":
                         endpoint = self.config.llm_base_url.rstrip("/") + "/messages"
                         headers = {"x-api-key": self.config.llm_api_key, "anthropic-version": "2023-06-01"}
@@ -240,9 +273,7 @@ class Provider:
                         raise PolicyError("Run cancelled.")
                     time.sleep(0.2)
         if response is None or response.status_code >= 400:
-            raise PolicyError(
-                f"Model provider rejected the request (HTTP {response.status_code if response else 'unknown'}). Check model and credentials."
-            )
+            raise PolicyError(rejection_message(response, self.config))
         data = response.json()
         if (not self.config.model_profile_id or self.config.model_usage_mode == "free_only") and data.get(
             "usage", {}
@@ -259,6 +290,7 @@ class Provider:
         if isinstance(actual, int) and actual > 0:
             self.usage["tokens"] += actual - reservation
             self.persist_usage(self.usage.copy())
+        content = ""
         try:
             if self.config.llm_protocol == "anthropic":
                 content = "".join(
@@ -274,11 +306,26 @@ class Provider:
                 )
             else:
                 content = data["choices"][0]["message"]["content"]
+            if isinstance(content, str) and content.strip().startswith(("```json\n", "```\n")):
+                fenced = content.strip()
+                if fenced.endswith("```"):
+                    content = fenced.split("\n", 1)[1][:-3].strip()
             result = json.loads(content)
+            if role == "conversation" and isinstance(result, str) and result.strip():
+                return {"reply": result}
             if not isinstance(result, dict):
                 raise ValueError
             return result
         except (ValueError, KeyError, IndexError, TypeError):
+            if (
+                role == "conversation"
+                and isinstance(content, str)
+                and content.strip()
+                and not content.lstrip().startswith(("{", "[", "```"))
+            ):
+                # Advisory text is safe to display; executable engineering roles
+                # continue to require validated structured output.
+                return {"reply": content.strip()[:12000]}
             raise PolicyError(
                 "Model returned invalid structured output. No candidate was approved."
             ) from None

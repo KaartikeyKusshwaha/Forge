@@ -1,6 +1,6 @@
 [project]
 name = "forge-agent"
-version = "0.6.0"
+version = "0.6.1"
 description = "Human-approved issue-to-PR engineering, inside GitHub"
 requires-python = ">=3.12"
 dependencies = [

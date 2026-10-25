@@ -54,6 +54,9 @@ def reply(store, config, run_id, request_key):
         "request": run.get("feedback") or run.get("request"),
         "status": run["status"],
         "error": run.get("error"),
+        "execution_model": run.get("model"),
+        "connected_model": selected.llm_model,
+        "prior_diagnostics": run.get("diagnostics"),
         "plan": run.get("plan"),
         "candidate_diff": str((run.get("candidate") or {}).get("patch", ""))[:12000],
         "checks": [
@@ -95,6 +98,12 @@ def reply(store, config, run_id, request_key):
 
     def finish(row, data):
         turn = next(t for t in data["chat"] if t["id"] == request_key)
-        turn.update(reply=answer, error=error, status="failed" if error else "answered", usage=usage)
+        turn.update(
+            reply=answer,
+            error=error,
+            status="failed" if error else "answered",
+            usage=usage,
+            model=selected.llm_model,
+        )
 
     return store.mutate(run_id, finish)

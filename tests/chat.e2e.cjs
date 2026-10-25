@@ -27,6 +27,7 @@ const assert = require("node:assert/strict");
     await page.evaluate(css=>{const style=document.createElement("style");style.textContent=css;document.querySelector("#forge-companion").shadowRoot.append(style);},fs.readFileSync("extension/panel.css","utf8"));
     await page.getByRole("button",{name:"Open Forge",exact:true}).click();
     await page.getByRole("button",{name:"Talk to Forge",exact:true}).click();
+    assert.equal(await page.getByRole("button",{name:/Request follow-up changes|Analyze failure with Groq|Suggest changes/}).count(),0);
     const input=page.getByRole("textbox",{name:"Message Forge",exact:true});
     await input.fill("Please add keyboard navigation and <script>alert(1)</script> tests.");
     await input.press("Control+Enter");
