@@ -1,5 +1,6 @@
 """Trusted controller on a disposable GitHub VM; target code runs under a different UID and systemd."""
 import base64
+from contextlib import contextmanager
 import glob
 import gzip
 import hashlib
@@ -41,7 +42,18 @@ files = json.loads(raw)
 if not isinstance(files, dict) or len(files) > 10_000:
     raise SystemExit("Invalid source inventory")
 
-with tempfile.TemporaryDirectory(prefix="forge-isolated-", dir="/tmp", ignore_cleanup_errors=True) as directory:
+@contextmanager
+def disposable_source():
+    directory = tempfile.mkdtemp(prefix="forge-isolated-", dir="/tmp")
+    try:
+        yield directory
+    finally:
+        # Unprivileged builds can own nested files. The disposable VM destroys
+        # anything the controller cannot remove; cleanup must not discard evidence.
+        shutil.rmtree(directory, ignore_errors=True)
+
+
+with disposable_source() as directory:
     work = Path(directory)
     work.chmod(0o777)
     for path, text in files.items():
