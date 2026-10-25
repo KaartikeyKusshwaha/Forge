@@ -219,7 +219,7 @@ class Provider:
         text = json.dumps(context, ensure_ascii=False)[:80_000]
         # A conservative character-count reservation bounds even unusually dense tokenizations.
         reservation = len(SYSTEM + instructions + text) + self.config.max_output_tokens
-        if (
+        if self.config.model_usage_mode != "unlimited" and (
             self.usage["calls"] >= self.config.max_calls
             or self.usage["tokens"] + reservation > self.config.max_tokens
         ):
@@ -276,7 +276,7 @@ class Provider:
         for attempt in range(3):
             if self.cancelled():
                 raise PolicyError("Run cancelled.")
-            if (
+            if self.config.model_usage_mode != "unlimited" and (
                 self.usage["calls"] >= self.config.max_calls
                 or self.usage["tokens"] + reservation > self.config.max_tokens
             ):

@@ -10,6 +10,7 @@ const assert = require("node:assert/strict");
     await page.goto("https://github.com/owner/repo");
     await page.evaluate(()=>{
       const run={id:"a".repeat(32),repo:"owner/repo",issue:0,mode:"github",conversation_only:true,status:"needs_input",title:"Conversation",events:[],usage:{},chat:[]};
+      let deleted=false;
       window.chrome={runtime:{getURL:()=>"data:text/css,",sendMessage:async message=>{
         if(message.action==="status") return {ok:true,data:{github:true,model:true,runner:true}};
         if(message.action==="active") return {ok:true,data:{id:message.id||null}};
@@ -19,6 +20,8 @@ const assert = require("node:assert/strict");
           run.chat.push({id:message.body.request_key,message:message.body.message,reply:"I can help refine that change. Build from conversation creates a checked proposal.",status:"answered",created:Date.now()/1000});
           return {ok:true,data:run};
         }
+        if(message.action==="list") return {ok:true,data:{runs:deleted ? [] : [run]}};
+        if(message.action==="session") {window.sessionAction=message.body.action;if(message.body.action === "end") run.ended=true;if(message.body.action === "forget")run.chat=[];if(message.body.action === "delete")deleted=true;return {ok:true,data:run};}
         if(message.action==="revision") {window.builtFeedback=message.body.feedback;return {ok:false,error:"Fixture stops before execution"};}
         return {ok:true,data:{}};
       }}};
@@ -49,6 +52,14 @@ const assert = require("node:assert/strict");
     await page.getByRole("button",{name:"Build from conversation",exact:true}).click();
     assert.match(await page.evaluate(()=>window.builtFeedback),/keyboard navigation/);
     assert.match(await page.evaluate(()=>window.builtFeedback),/Keep this draft/);
+    await page.getByRole("button",{name:"History",exact:true}).click();
+    await page.getByRole("button",{name:"Forget conversation",exact:true}).click();
+    assert.equal(await page.evaluate(()=>window.sessionAction),"forget");
+    await page.getByRole("button",{name:"End session",exact:true}).click();
+    assert.equal(await page.evaluate(()=>window.sessionAction),"end");
+    await page.getByRole("button",{name:"Delete local record",exact:true}).click();
+    assert.equal(await page.evaluate(()=>window.sessionAction),"delete");
+    assert.equal(await page.locator(".history-row").count(),0);
     console.log("PASS direct chat entry, conversation rendering, keyboard send, escaping, draft recovery, mobile and proposal handoff");
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

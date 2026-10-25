@@ -94,6 +94,7 @@ function profileView(data) {
     const box = document.createElement("article"); box.className="model-profile";
     const heading = document.createElement("h3"); heading.textContent=profile.label + (profile.active ? " · Active" : ""); box.append(heading);
     const info=document.createElement("p"); info.textContent=`${profile.provider} · ${profile.mode === "unlimited" ? "No Forge usage cap" : profile.mode === "limited" ? "Call and token limits" : profile.mode === "free_only" ? "Free usage" : profile.mode}`; box.append(info);
+    if(profile.mode === "limited"){const used=document.createElement("p");used.textContent=`${profile.usage?.calls || 0} / ${profile.call_limit || 100} calls · ${profile.usage?.tokens || 0} / ${profile.token_limit || 1000000} tokens`;box.append(used);}
     const policy=document.createElement("select");policy.setAttribute("aria-label",`Usage policy for ${profile.label}`);
     for(const [value,label] of [["free_only","Free usage"],["limited","Limited API usage"],["unlimited","Unlimited · no Forge usage cap"]]){const option=document.createElement("option");option.value=value;option.textContent=label;option.selected=profile.mode===value;policy.append(option);}box.append(policy);
     const calls=document.createElement("input");calls.type="number";calls.min="1";calls.value=profile.call_limit || 100;calls.setAttribute("aria-label",`API call limit for ${profile.label}`);

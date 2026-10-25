@@ -87,7 +87,7 @@ async function screenshot(page, name) {
     await screenshot(page, "forge-dark");
     await page.getByRole("button", {name: "Approve demo proposal", exact: true}).click();
     await page.getByText("Demo complete. No GitHub changes made.", {exact: true}).waitFor({timeout: 15_000});
-    await page.getByRole("button", {name: "Recent runs", exact: true}).click();
+    await page.getByRole("button", {name: "History", exact: true}).click();
     await page.locator(".history-row").first().waitFor();
     assert.ok(await page.locator(".history-row").count() > 0);
     await page.getByRole("button", {name: "Back", exact: true}).click();

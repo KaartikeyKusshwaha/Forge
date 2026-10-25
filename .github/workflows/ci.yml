@@ -64,6 +64,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: npm install --global corepack@0.36.0
       - run: python -m pip install pytest==8.3.5
       - run: python scripts/check-runner-isolation.py
       - uses: actions/upload-artifact@v4

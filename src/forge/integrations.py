@@ -35,6 +35,7 @@ ENV_ENDPOINTS = {
     "GEMINI_API_KEY": "https://generativelanguage.googleapis.com/v1beta/openai",
     "GOOGLE_API_KEY": "https://generativelanguage.googleapis.com/v1beta/openai",
     "DEEPSEEK_API_KEY": "https://api.deepseek.com",
+    "FIREWORKS_API_KEY": "https://api.fireworks.ai/inference/v1",
     "XAI_API_KEY": "https://api.x.ai/v1",
     "MISTRAL_API_KEY": "https://api.mistral.ai/v1",
     "ZAI_API_KEY": "https://api.z.ai/api/paas/v4",
@@ -216,6 +217,14 @@ def discover_compatible(endpoint, key, protocol="openai", model=""):
     try:
         response = httpx.get(endpoint + "/models", headers=headers, timeout=20, follow_redirects=False)
         if response.status_code in {404, 405}:
+            if model and re.fullmatch(r"[A-Za-z0-9_.:/-]{1,200}", model):
+                return {
+                    "endpoint": endpoint,
+                    "protocol": protocol,
+                    "authenticated": False,
+                    "discovery_basis": "Model supplied in the user's API example; first inference verifies access",
+                    "models": [{"id": model, "name": model, "parameters": [], "prices": {}, "free": False}],
+                }
             return {
                 "needs": "unsupported_catalog",
                 "message": "This service does not expose a compatible model catalog at /models. Authentication is not verified. Its protocol needs a discovery adapter before it can be connected safely.",

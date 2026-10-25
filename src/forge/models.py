@@ -247,6 +247,13 @@ class ModelVault:
                     "SELECT profile,SUM(amount) FROM spend WHERE status NOT IN ('denied','expired','cancelled') GROUP BY profile"
                 )
             )
+        with self.connect() as db:
+            usage = {
+                row[0]: {"calls": row[1], "tokens": row[2]}
+                for row in db.execute(
+                    "SELECT profile,COUNT(*),COALESCE(SUM(tokens),0) FROM usage_calls GROUP BY profile"
+                )
+            }
         return {
             "profiles": [
                 {
@@ -255,6 +262,7 @@ class ModelVault:
                         **json.loads(raw),
                         "id": pid,
                         "spent_usd": amounts.get(pid, 0),
+                        "usage": usage.get(pid, {"calls": 0, "tokens": 0}),
                         "active": bool(active and active[0] == pid),
                     }.items()
                     if k != "key"
