@@ -293,7 +293,19 @@ class ModelVault:
     def activate(self, pid, model=None, verify=True):
         data = self.read(pid)
         if verify:
-            if data["provider"] == "local":
+            if data.get("compatible"):
+                from forge.integrations import discover_compatible
+
+                result = discover_compatible(
+                    data["endpoint"], protect(data["key"], True), data["protocol"], data["model"]
+                )
+                if "models" not in result:
+                    raise PolicyError(result["message"])
+                models = [
+                    {**m, "prices": data["rates"], "free": data["mode"] == "free_only"}
+                    for m in result["models"]
+                ]
+            elif data["provider"] == "local":
                 _, models = discover_local(data["endpoint"])
             else:
                 _, models = discover(
@@ -312,13 +324,38 @@ class ModelVault:
     def apply(self, pid, data):
         self.config.llm_provider = data["provider"]
         self.config.llm_base_url = (
-            data["endpoint"] if data["provider"] == "local" else ENDPOINTS[data["provider"]]
+            data["endpoint"]
+            if data["provider"] == "local" or data.get("compatible")
+            else ENDPOINTS[data["provider"]]
         )
         self.config.llm_model = data["model"]
         self.config.llm_api_key = protect(data["key"], True)
         self.config.groq_free_plan_confirmed = data["groq_confirmed"]
         self.config.model_profile_id = pid
         self.config.model_usage_mode = data["mode"]
+        self.config.llm_protocol = data.get("protocol", "openai")
+
+    def save_compatible(self, key, endpoint, protocol, models, label, mode, budget, rates, environment_names):
+        pid = uuid.uuid4().hex
+        data = {
+            "label": label or urlparse(endpoint).hostname,
+            "endpoint": endpoint,
+            "provider": "compatible",
+            "compatible": True,
+            "protocol": protocol,
+            "model": models[0]["id"],
+            "models": [{**m, "prices": rates, "free": mode == "free_only"} for m in models],
+            "mode": mode,
+            "budget_usd": budget,
+            "groq_confirmed": False,
+            "rates": rates,
+            "environment_names": environment_names,
+            "key": protect(key),
+            "billing_basis": "Owner-confirmed provider account controls and rates; not independently verified",
+        }
+        with self.connect() as db:
+            db.execute("INSERT INTO profiles VALUES(?,?)", (pid, json.dumps(data)))
+        return pid
 
     def load_active(self):
         with self.connect() as db:
@@ -332,6 +369,7 @@ class ModelVault:
             if active and active[0] == pid:
                 raise PolicyError("Activate another profile before removing the active profile.")
             db.execute("DELETE FROM profiles WHERE id=?", (pid,))
+            db.execute("DELETE FROM settings WHERE name='setup_helper' AND value=?", (pid,))
 
     def reserve(self, amount, role, run_id, cancelled):
         if not amount:

@@ -23,6 +23,11 @@ function allowedRequest(message) {
     case "model-delete": if (/^[a-f0-9]{32}$/.test(message.id || "")) return ["DELETE", "/api/model-profiles/" + message.id]; break;
     case "model-spending": return ["GET", "/api/model-spending"];
     case "model-decide": if (/^[a-f0-9]{32}$/.test(message.id || "")) return ["POST", "/api/model-spending/" + message.id, {approve:message.approve === true}]; break;
+    case "setup-helper-status": return ["GET", "/api/setup-assistant"];
+    case "setup-helper-connect": return ["POST", "/api/setup-assistant", message.body];
+    case "setup-helper-analyze": return ["POST", "/api/setup-assistant/analyze", message.body];
+    case "device-setup-status": return ["GET", "/api/device-setup"];
+    case "device-setup-action": return ["POST", "/api/device-setup", message.body];
     case "github-setup": return ["POST", "/api/setup/github"];
     case "list": return ["GET", "/api/runs" + (Number.isFinite(message.before) ? "?before=" + encodeURIComponent(message.before) : "")];
     case "analyze-repo":
@@ -64,6 +69,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   }
   (async () => {
     if (message.action.startsWith("model-") && !trustedOptions) throw new Error("Manage provider keys and API spending from extension settings only.");
+    if ((message.action.startsWith("setup-helper-") || message.action.startsWith("device-setup-")) && !trustedOptions) throw new Error("Local setup actions are restricted to extension settings.");
     if (message.action === "options") {
       await chrome.runtime.openOptionsPage();
       return {opened: true};

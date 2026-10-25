@@ -139,7 +139,7 @@
 
   function approvalFooter() {
     const r = state.run;
-    if (!r) return `<footer class="bottom-bar"><span class="small-dot"></span> YOUR REPOSITORY. YOUR CALL.<span>v0.4</span></footer>`;
+    if (!r) return `<footer class="bottom-bar"><span class="small-dot"></span> YOUR REPOSITORY. YOUR CALL.<span>v0.5</span></footer>`;
     if (r.status === "awaiting_approval") {
       if (r.mode !== "demo" && r.approval_expires_at && Date.now() / 1000 > r.approval_expires_at) {
         return `<footer class="approval-footer"><div class="approval-label">${icon("clock", 16)}This review window expired. Fresh validation is needed.</div>${button("refresh", "Refresh proposal and checks", "primary wide", "arrow")}<div class="footer-actions">${button("revision", "Suggest changes", "text-button")}${button("reject", "Reject", "text-button")}${button("download", "Download old patch", "text-button")}</div></footer>`;

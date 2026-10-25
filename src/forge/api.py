@@ -51,14 +51,21 @@ class RepositoryRequest(BaseModel):
 class ModelConnection(BaseModel):
     api_key: str = Field(default="", repr=False)
     label: str = Field(default="", max_length=100)
-    provider: Literal["auto", "openrouter-free", "groq-free"] = "auto"
+    provider: Literal["auto", "openrouter-free", "groq-free"] = (
+        "auto"  # Legacy clients only; UI has no picker.
+    )
     mode: Literal["free_only", "ask_paid", "capped"] = "free_only"
     budget_usd: float = Field(default=0, ge=0, le=1000, allow_inf_nan=False)
     groq_confirmed: bool = False
     activate: bool = True
-    environment: Literal["", "OPENROUTER_API_KEY", "GROQ_API_KEY"] = ""
+    environment: str = Field(default="", max_length=100, pattern=r"^$|^[A-Z][A-Z0-9_]*$")
     endpoint: str = Field(default="", max_length=200)
     command: str = Field(default="", repr=False)
+    environment_values: dict[str, str] = Field(default_factory=dict, repr=False, max_length=20)
+    endpoint_consent: bool = False
+    billing_guard_confirmed: bool = False
+    input_price: float | None = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
+    output_price: float | None = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
 
 
 class ModelActivation(BaseModel):
@@ -69,6 +76,12 @@ class SpendDecision(BaseModel):
     approve: bool
 
 
+class LocalSetupAction(BaseModel):
+    action: Literal["install_ollama", "start_ollama", "pull_model"]
+    consent: bool = False
+    model: str = Field(default="", max_length=100)
+
+
 def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     config.data_dir.mkdir(parents=True, exist_ok=True)
     db = store or Store(config.database_url)
@@ -77,10 +90,13 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     async def lifespan(app):
         yield
 
-    app = FastAPI(title="Forge", version="0.4.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Forge", version="0.5.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
     app.state.store = db
     vault = ModelVault(config)
+    from forge.device_setup import DeviceSetup
+
+    device_setup = DeviceSetup()
     model_lock = threading.RLock()
 
     def model_serialized(function):
@@ -136,7 +152,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
 
     @app.get("/health")
     def health():
-        return {"service": "forge", "version": "0.4.0", "status": "ok"}
+        return {"service": "forge", "version": "0.5.0", "status": "ok"}
 
     @app.get("/api/status", dependencies=[Depends(authenticated)])
     def status():
@@ -164,25 +180,42 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     @app.post("/api/model-profiles", dependencies=[Depends(authenticated)])
     @model_serialized
     def connect_model(body: ModelConnection):
-        from forge.models import connection_input
+        from forge.integrations import prepare_connection
 
         if body.activate and db.has_active_runs():
             raise Conflict("Wait for active runs to finish before changing the model connection.")
         if body.mode != "free_only" and body.budget_usd <= 0:
             raise HTTPException(422, "Set a positive lifetime spending cap for paid usage.")
-        key, provider = connection_input(
-            body.api_key, body.provider, body.environment, body.endpoint, body.command
-        )
-        if provider != "local" and (len(key) < 12 or len(key) > 1000):
-            raise HTTPException(
-                422, "Provide a valid provider key. Keys are never returned in API responses."
-            )
-        pid = vault.save(
-            key, body.label, provider, body.mode, body.budget_usd, body.groq_confirmed, endpoint=body.endpoint
-        )
-        if body.activate:
-            vault.activate(pid, verify=False)
-        return vault.list()
+        return prepare_connection(body, config, vault)
+
+    @app.get("/api/setup-assistant", dependencies=[Depends(authenticated)])
+    def setup_assistant_status():
+        from forge.integrations import groq_helper
+
+        return {"configured": groq_helper(config) is not None, "required": False}
+
+    @app.get("/api/device-setup", dependencies=[Depends(authenticated)])
+    def device_setup_status():
+        return device_setup.status()
+
+    @app.post("/api/device-setup", dependencies=[Depends(authenticated)])
+    def device_setup_action(body: LocalSetupAction):
+        return device_setup.start(body.action, body.consent, body.model)
+
+    @app.post("/api/setup-assistant", dependencies=[Depends(authenticated)])
+    def setup_assistant_connect(body: ModelConnection):
+        if not body.api_key.startswith("gsk_"):
+            raise HTTPException(422, "Use your own Groq key for the optional setup assistant.")
+        pid = vault.save(body.api_key, "Setup assistant", "groq-free", "free_only", 0, body.groq_confirmed)
+        with vault.connect() as connection:
+            connection.execute("INSERT OR REPLACE INTO settings VALUES('setup_helper',?)", (pid,))
+        return {"configured": True, "required": False}
+
+    @app.post("/api/setup-assistant/analyze", dependencies=[Depends(authenticated)])
+    def setup_assistant_analyze(body: ModelConnection):
+        from forge.integrations import assist
+
+        return assist(config, body.command or body.endpoint)
 
     @app.post("/api/model-profiles/{profile_id}/activate", dependencies=[Depends(authenticated)])
     @model_serialized

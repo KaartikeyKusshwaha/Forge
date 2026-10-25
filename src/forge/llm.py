@@ -47,6 +47,23 @@ def free_models() -> list[dict]:
 
 
 def verify_free(config: Settings) -> dict:
+    if config.llm_provider == "compatible" and config.model_profile_id:
+        from forge.integrations import discover_compatible
+        from forge.models import ModelVault
+
+        record = ModelVault(config).read(config.model_profile_id)
+        if (
+            not record.get("compatible")
+            or record["endpoint"] != config.llm_base_url
+            or record["mode"] != config.model_usage_mode
+        ):
+            raise PolicyError("Provider profile configuration changed. Reconnect before calling a model.")
+        result = discover_compatible(
+            record["endpoint"], config.llm_api_key, record["protocol"], config.llm_model
+        )
+        if config.llm_model not in {m["id"] for m in result.get("models", [])}:
+            raise PolicyError("The selected model is no longer available at this endpoint.")
+        return {"id": config.llm_model, "parameters": [], "prices": record["rates"]}
     if config.model_profile_id and config.model_usage_mode != "free_only":
         from forge.models import ENDPOINTS, discover
 
@@ -174,12 +191,33 @@ class Provider:
             self.persist_usage(self.usage.copy())
             try:
                 with httpx.Client(timeout=90) as client:
-                    response = client.post(
-                        self.config.llm_base_url.rstrip("/") + "/chat/completions",
-                        headers={"Authorization": "Bearer " + self.config.llm_api_key}
+                    endpoint = self.config.llm_base_url.rstrip("/") + "/chat/completions"
+                    request_body = body
+                    headers = (
+                        {"Authorization": "Bearer " + self.config.llm_api_key}
                         if self.config.llm_api_key
-                        else {},
-                        json=body,
+                        else {}
+                    )
+                    if self.config.llm_protocol == "anthropic":
+                        endpoint = self.config.llm_base_url.rstrip("/") + "/messages"
+                        headers = {"x-api-key": self.config.llm_api_key, "anthropic-version": "2023-06-01"}
+                        request_body = {
+                            "model": selected["id"],
+                            "max_tokens": self.config.max_output_tokens,
+                            "system": body["messages"][0]["content"],
+                            "messages": body["messages"][1:],
+                        }
+                    if self.config.llm_protocol == "responses":
+                        endpoint = self.config.llm_base_url.rstrip("/") + "/responses"
+                        request_body = {
+                            "model": selected["id"],
+                            "input": body["messages"],
+                            "max_output_tokens": self.config.max_output_tokens,
+                        }
+                    response = client.post(
+                        endpoint,
+                        headers=headers,
+                        json=request_body,
                     )
                 if vault:
                     try:
@@ -222,7 +260,21 @@ class Provider:
             self.usage["tokens"] += actual - reservation
             self.persist_usage(self.usage.copy())
         try:
-            result = json.loads(data["choices"][0]["message"]["content"])
+            if self.config.llm_protocol == "anthropic":
+                content = "".join(
+                    p.get("text", "") for p in data.get("content", []) if p.get("type") == "text"
+                )
+            elif self.config.llm_protocol == "responses":
+                content = "".join(
+                    p.get("text", "")
+                    for item in data.get("output", [])
+                    if item.get("type") == "message"
+                    for p in item.get("content", [])
+                    if p.get("type") == "output_text"
+                )
+            else:
+                content = data["choices"][0]["message"]["content"]
+            result = json.loads(content)
             if not isinstance(result, dict):
                 raise ValueError
             return result

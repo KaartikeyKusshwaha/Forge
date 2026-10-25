@@ -1,7 +1,7 @@
 {
   "name": "forge-github-companion",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "scripts": {
     "test:extension": "node tests/extension.e2e.cjs",
     "test:background": "node --test tests/background.test.cjs",

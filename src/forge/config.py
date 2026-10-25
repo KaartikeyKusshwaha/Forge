@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     groq_free_plan_confirmed: bool = False
     model_profile_id: str = ""
     model_usage_mode: str = "free_only"
+    llm_protocol: str = "openai"
     max_output_tokens: int = 8192
     executor: str = "github-actions"
     runner_repository: str = "KaartikeyKusshwaha/Forge"
