@@ -189,7 +189,11 @@ class Worker:
             self.config.model_copy(update={"llm_model": model}) if mode != "demo" else self.config
         )
         provider = Provider(provider_config, usage, lambda u: save(usage=u), cancelled)
-        evidence = {"issue": context, "retrieved_files": shortlist}
+        evidence = {
+            "available_paths": sorted({f["path"] for f in shortlist}),
+            "issue": context,
+            "retrieved_files": shortlist,
+        }
         stage("planning", "Planner is defining a focused change and acceptance checks.")
         if mode == "demo":
             plan = Plan(

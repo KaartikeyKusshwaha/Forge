@@ -33,3 +33,11 @@ class TestChanges(BaseModel):
 
 
 ROLE_CONTRACTS = {"planner": Plan, "coder": Changes, "tester": TestChanges, "reviewer": Review}
+
+
+def output_schema(role, context):
+    schema = ROLE_CONTRACTS[role].model_json_schema()
+    paths = context.get("available_paths")
+    if role == "planner" and isinstance(paths, list) and 0 < len(paths) <= 200:
+        schema["properties"]["files"]["items"] = {"type": "string", "enum": paths}
+    return schema

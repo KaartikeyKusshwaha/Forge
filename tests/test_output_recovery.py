@@ -175,3 +175,12 @@ def test_rejected_capability_request_does_not_invent_a_full_prompt_token_charge(
     p = provider(max_tokens=100000)
     assert p.ask("planner", "Plan", {"large_context": "x" * 79000}) == PLAN
     assert len(requests) == 2 and p.usage["tokens"] == 30
+
+
+def test_unindexed_planner_paths_are_corrected_before_worker_execution(monkeypatch):
+    requests = transport(
+        monkeypatch,
+        [completion(json.dumps({**PLAN, "files": ["invented.py"]})), completion(json.dumps(PLAN))],
+    )
+    assert provider().ask("planner", "Plan", {"available_paths": ["pagination.py"]}) == PLAN
+    assert len(requests) == 2
