@@ -117,6 +117,15 @@ def test_configuration_import_is_parse_only(monkeypatch):
         connection_input("", command="powershell install-something")
 
 
+def test_pasted_bearer_key_takes_precedence_over_missing_environment(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    command = "curl https://openrouter.ai/api/v1/models -H 'Authorization: Bearer " + KEY + "'"
+    assert connection_input("", environment="OPENROUTER_API_KEY", command=command) == (KEY, "openrouter-free")
+    with pytest.raises(PolicyError, match="Choose API key"):
+        connection_input("", environment="OPENROUTER_API_KEY")
+
+
 def test_api_profiles_never_return_secrets_and_block_active_switch(monkeypatch, setup):
     monkeypatch.setattr("forge.models.discover", fake_discover)
     config, store, client = setup

@@ -58,12 +58,6 @@ def discover_local(endpoint):
 
 
 def connection_input(key, provider="auto", environment="", endpoint="", command=""):
-    if environment:
-        from dotenv import dotenv_values
-
-        key = os.environ.get(environment) or dotenv_values(".env").get(environment) or ""
-        if not key:
-            raise PolicyError("That environment variable is not configured in the local service.")
     if command:
         if len(command) > 12000:
             raise PolicyError("Command configuration is too long.")
@@ -80,6 +74,14 @@ def connection_input(key, provider="auto", environment="", endpoint="", command=
         auth = [p for p in parts if p.lower().startswith("authorization: bearer ")]
         if auth:
             key = auth[0].split(" ", 2)[2].strip()
+    if environment and not key:
+        from dotenv import dotenv_values
+
+        key = os.environ.get(environment) or dotenv_values(".env").get(environment) or ""
+        if not key:
+            raise PolicyError(
+                f"{environment} is not set in the local Forge service. Choose API key and paste your key, or paste a curl example containing its Bearer key. Selecting a variable does not create it."
+            )
     if endpoint:
         if endpoint.startswith("http://"):
             local_endpoint(endpoint)
@@ -99,6 +101,10 @@ def connection_input(key, provider="auto", environment="", endpoint="", command=
             from dotenv import dotenv_values
 
             key = os.environ.get(variable) or dotenv_values(".env").get(variable) or ""
+            if not key:
+                raise PolicyError(
+                    f"The pasted command references {variable}, but it is not set in the local service. Use API key mode or replace the placeholder with your real key in settings."
+                )
     return key.strip(), provider
 
 

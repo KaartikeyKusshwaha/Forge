@@ -25,6 +25,12 @@ async function inspect() {
 
 const modelMessage = document.querySelector("#model-message");
 let connectionMethod = "key";
+document.querySelector("#model-command").addEventListener("input", event => {
+  if (event.target.value.trim()) document.querySelector("#model-environment").value = "";
+});
+document.querySelector("#model-environment").addEventListener("change", event => {
+  if (event.target.value) document.querySelector("#model-command").value = "";
+});
 document.querySelectorAll("[data-method]").forEach(button => button.addEventListener("click", () => {
   connectionMethod = button.dataset.method;
   document.querySelectorAll("[data-method]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));
