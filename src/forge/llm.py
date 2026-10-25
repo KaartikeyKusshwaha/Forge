@@ -194,6 +194,8 @@ class Provider:
                 reason = str(exc)
                 if "unsupported output control" in reason:
                     self._disable_output_controls = True
+                if "max_completion_tokens" in reason:
+                    self._token_parameter = "max_completion_tokens"
                 recovery = self.usage.setdefault("output_recovery", [])
                 recovery.append({"role": role, "attempt": attempt + 1, "reason": reason})
                 self.persist_usage(self.usage.copy())
@@ -232,7 +234,7 @@ class Provider:
                 {"role": "system", "content": SYSTEM + f"\nRole: {role}\n" + instructions},
                 {"role": "user", "content": text},
             ],
-            "max_tokens": self.config.max_output_tokens,
+            getattr(self, "_token_parameter", "max_tokens"): self.config.max_output_tokens,
         }
         contract = ROLE_CONTRACTS.get(role)
         parameters = selected.get("parameters", [])
@@ -374,8 +376,17 @@ class Provider:
                     if self.cancelled():
                         raise PolicyError("Run cancelled.")
                     time.sleep(0.2)
-        if response is not None and response.status_code in {400, 422}:
+        if response is not None and response.status_code in {400, 404, 422}:
             rejection = rejection_message(response, self.config)
+            if (
+                self.config.llm_protocol == "openai"
+                and "max_tokens" in rejection
+                and "max_completion_tokens" in rejection
+                and "max_tokens" in body
+            ):
+                raise OutputFormatError(
+                    "Provider requires max_completion_tokens instead of max_tokens; retry with the same output ceiling."
+                )
             if any(k in body for k in ("tools", "response_format")) and any(
                 k in rejection.lower()
                 for k in ("unsupported", "not supported", "not support", "not allowed", "unrecognized")

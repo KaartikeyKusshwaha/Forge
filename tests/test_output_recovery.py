@@ -191,3 +191,21 @@ def test_unlimited_permission_does_not_apply_a_forge_token_or_call_cap(monkeypat
     p = provider(model_usage_mode="unlimited", max_calls=0, max_tokens=0)
     assert p.ask("planner", "Plan", {}) == PLAN
     assert len(requests) == 1
+
+
+def test_provider_specific_token_parameter_is_corrected_without_raising_limit(monkeypatch):
+    requests = transport(
+        monkeypatch,
+        [
+            httpx.Response(
+                400,
+                json={"error": {"message": "max_tokens is unsupported. Use max_completion_tokens instead."}},
+            ),
+            completion(json.dumps(PLAN)),
+        ],
+    )
+    p = provider()
+    assert p.ask("planner", "Plan", {}) == PLAN
+    assert "max_tokens" in requests[0]["body"]
+    assert "max_tokens" not in requests[1]["body"]
+    assert requests[1]["body"]["max_completion_tokens"] == requests[0]["body"]["max_tokens"]
