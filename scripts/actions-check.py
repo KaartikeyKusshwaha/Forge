@@ -18,12 +18,21 @@ request_id = os.environ.pop("FORGE_REQUEST_ID")
 profile = os.environ.pop("FORGE_PROFILE")
 packed = os.environ.pop("FORGE_SNAPSHOT")
 digest = os.environ.pop("FORGE_SNAPSHOT_DIGEST")
+source_repo = os.environ.pop("FORGE_SOURCE_REPO", "")
+source_sha = os.environ.pop("FORGE_SOURCE_SHA", "")
 if not re.fullmatch(r"[a-f0-9]{32}", request_id) or profile not in {"python", "typescript"}:
     raise SystemExit("Invalid check request")
 if len(packed) > 58_000 or not re.fullmatch(r"[a-f0-9]{64}", digest):
     raise SystemExit("Invalid snapshot envelope")
 with gzip.GzipFile(fileobj=io.BytesIO(base64.b64decode(packed, validate=True))) as stream:
     raw = stream.read(50_000_001)
+if len(raw) > 50_000_000:
+    raise SystemExit("Source envelope exceeds size limit")
+if source_repo or source_sha:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+    from forge.snapshot import reconstruct
+
+    files, raw = reconstruct(json.loads(raw), source_repo, source_sha)
 if len(raw) > 50_000_000 or hashlib.sha256(raw).hexdigest() != digest:
     raise SystemExit("Snapshot digest or size mismatch")
 files = json.loads(raw)

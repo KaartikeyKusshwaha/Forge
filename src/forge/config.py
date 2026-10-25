@@ -25,7 +25,9 @@ class Settings(BaseSettings):
     llm_api_key: str = Field(default="", repr=False)
     llm_model: str = "auto"
     groq_free_plan_confirmed: bool = False
-    max_output_tokens: int = 3000
+    model_profile_id: str = ""
+    model_usage_mode: str = "free_only"
+    max_output_tokens: int = 8192
     executor: str = "github-actions"
     runner_repository: str = "KaartikeyKusshwaha/Forge"
     runner_ref: str = "main"

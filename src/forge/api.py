@@ -2,8 +2,10 @@ import asyncio
 import hashlib
 import hmac
 import json
+import threading
 import time
 from contextlib import asynccontextmanager
+from functools import wraps
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -15,6 +17,7 @@ from forge.actions import ActionsSandbox
 from forge.config import Settings
 from forge.github import GitHub, GitHubError
 from forge.llm import free_models
+from forge.models import ModelVault
 from forge.policy import PolicyError, fingerprint
 from forge.setup import AppSetup
 from forge.store import Conflict, Store
@@ -44,6 +47,27 @@ class RepositoryRequest(BaseModel):
     enable: bool = False
 
 
+class ModelConnection(BaseModel):
+    api_key: str = Field(default="", repr=False)
+    label: str = Field(default="", max_length=100)
+    provider: Literal["auto", "openrouter-free", "groq-free"] = "auto"
+    mode: Literal["free_only", "ask_paid", "capped"] = "free_only"
+    budget_usd: float = Field(default=0, ge=0, le=1000, allow_inf_nan=False)
+    groq_confirmed: bool = False
+    activate: bool = True
+    environment: Literal["", "OPENROUTER_API_KEY", "GROQ_API_KEY"] = ""
+    endpoint: str = Field(default="", max_length=200)
+    command: str = Field(default="", repr=False)
+
+
+class ModelActivation(BaseModel):
+    model: str | None = Field(default=None, max_length=200)
+
+
+class SpendDecision(BaseModel):
+    approve: bool
+
+
 def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     config.data_dir.mkdir(parents=True, exist_ok=True)
     db = store or Store(config.database_url)
@@ -52,9 +76,19 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     async def lifespan(app):
         yield
 
-    app = FastAPI(title="Forge", version="0.3.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Forge", version="0.4.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
     app.state.store = db
+    vault = ModelVault(config)
+    model_lock = threading.RLock()
+
+    def model_serialized(function):
+        @wraps(function)
+        def locked(*args, **kwargs):
+            with model_lock:
+                return function(*args, **kwargs)
+
+        return locked
 
     def authenticated(authorization: str = Header(default="")):
         if not config.owner_token or not hmac.compare_digest(authorization, "Bearer " + config.owner_token):
@@ -84,7 +118,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
 
     @app.get("/health")
     def health():
-        return {"service": "forge", "version": "0.3.0", "status": "ok"}
+        return {"service": "forge", "version": "0.4.0", "status": "ok"}
 
     @app.get("/api/status", dependencies=[Depends(authenticated)])
     def status():
@@ -93,7 +127,8 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
             "github_auth": config.github_auth,
             "model": config.llm_ready,
             "model_name": config.llm_model,
-            "free_only": True,
+            "free_only": config.model_usage_mode == "free_only",
+            "model_usage_mode": config.model_usage_mode,
             "provider": config.llm_provider,
             "demo": config.demo_enabled,
             "publishing": config.publish_enabled,
@@ -103,6 +138,55 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     @app.get("/api/models", dependencies=[Depends(authenticated)])
     def models():
         return {"models": free_models(), "selection": config.llm_model, "paid_fallback": False}
+
+    @app.get("/api/model-profiles", dependencies=[Depends(authenticated)])
+    def model_profiles():
+        return vault.list()
+
+    @app.post("/api/model-profiles", dependencies=[Depends(authenticated)])
+    @model_serialized
+    def connect_model(body: ModelConnection):
+        from forge.models import connection_input
+
+        if body.activate and db.has_active_runs():
+            raise Conflict("Wait for active runs to finish before changing the model connection.")
+        if body.mode != "free_only" and body.budget_usd <= 0:
+            raise HTTPException(422, "Set a positive lifetime spending cap for paid usage.")
+        key, provider = connection_input(
+            body.api_key, body.provider, body.environment, body.endpoint, body.command
+        )
+        if provider != "local" and (len(key) < 12 or len(key) > 1000):
+            raise HTTPException(
+                422, "Provide a valid provider key. Keys are never returned in API responses."
+            )
+        pid = vault.save(
+            key, body.label, provider, body.mode, body.budget_usd, body.groq_confirmed, endpoint=body.endpoint
+        )
+        if body.activate:
+            vault.activate(pid, verify=False)
+        return vault.list()
+
+    @app.post("/api/model-profiles/{profile_id}/activate", dependencies=[Depends(authenticated)])
+    @model_serialized
+    def activate_model(profile_id: str, body: ModelActivation):
+        if db.has_active_runs():
+            raise Conflict("Wait for active runs to finish before switching profiles.")
+        vault.activate(profile_id, body.model)
+        return vault.list()
+
+    @app.delete("/api/model-profiles/{profile_id}", dependencies=[Depends(authenticated)])
+    def delete_model(profile_id: str):
+        vault.delete(profile_id)
+        return vault.list()
+
+    @app.get("/api/model-spending", dependencies=[Depends(authenticated)])
+    def model_spending():
+        return vault.pending()
+
+    @app.post("/api/model-spending/{request_id}", dependencies=[Depends(authenticated)])
+    def model_spend_decision(request_id: str, body: SpendDecision):
+        vault.decide(request_id, body.approve)
+        return vault.pending()
 
     @app.get("/api/repositories", dependencies=[Depends(authenticated)])
     def repositories():
@@ -139,6 +223,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
         return result
 
     @app.post("/api/runs", status_code=201, dependencies=[Depends(authenticated)])
+    @model_serialized
     def new_run(body: NewRun):
         if body.issue == 0 and (body.mode != "github" or len(body.request.strip()) < 10):
             raise HTTPException(422, "Describe the repository task in at least 10 characters.")
@@ -264,6 +349,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
         )
 
     @app.post("/api/runs/{run_id}/revision", status_code=201, dependencies=[Depends(authenticated)])
+    @model_serialized
     def revision(run_id: str, body: Revision):
         get_run(run_id)
         return db.revise(run_id, body.feedback, body.request_key)

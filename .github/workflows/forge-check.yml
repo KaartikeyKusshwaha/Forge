@@ -16,6 +16,12 @@ on:
       digest:
         required: true
         type: string
+      source_repo:
+        required: false
+        type: string
+      source_sha:
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
@@ -39,6 +45,8 @@ jobs:
           FORGE_PROFILE: ${{ inputs.profile }}
           FORGE_SNAPSHOT: ${{ inputs.snapshot }}
           FORGE_SNAPSHOT_DIGEST: ${{ inputs.digest }}
+          FORGE_SOURCE_REPO: ${{ inputs.source_repo }}
+          FORGE_SOURCE_SHA: ${{ inputs.source_sha }}
         run: python scripts/actions-check.py
       - uses: actions/upload-artifact@v4
         with:

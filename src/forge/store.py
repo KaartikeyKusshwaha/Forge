@@ -95,7 +95,12 @@ class Store:
             **copy.deepcopy(row.data),
         )
 
+    def has_active_runs(self):
+        with Session(self.engine) as s:
+            return s.scalar(select(Run.id).where(Run.status.not_in(TERMINAL)).limit(1)) is not None
+
     def create(self, repo: str, issue: int, data: dict, key: str) -> dict:
+        # Model switches use the same durable run inventory, including older queued jobs.
         # Idempotency key belongs to this single-owner installation.
         run_id = uuid.uuid5(uuid.NAMESPACE_URL, "forge:" + key).hex
         with Session(self.engine) as s, s.begin():

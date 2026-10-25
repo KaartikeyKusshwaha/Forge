@@ -30,7 +30,9 @@ def local_config() -> Settings:
     # Never consume OPENAI_API_KEY or another paid provider key implicitly.
     if not config.llm_api_key:
         config.llm_api_key = os.environ.get("OPENROUTER_API_KEY", "")
-    return load_registration(config)
+    from forge.models import load_profiles
+
+    return load_profiles(load_registration(config))
 
 
 def main():

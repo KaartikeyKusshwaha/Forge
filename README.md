@@ -48,12 +48,18 @@ the file and browser profile private. This is not a public multi-tenant service.
 The development command runs a worker thread. Separate workers use
 `uv run forge worker` and an API started without `--with-worker`.
 
-## Free models only
+## Model connections and usage permissions
+
+Connection settings provide separate API-key, endpoint, and CLI/environment modes.
+Recognized keys discover available models automatically; OpenRouter selects free
+Inkling by default. Save multiple profiles and choose the active model. Free-only
+is the default; optional OpenRouter paid access requires either per-call approval
+or an explicit lifetime spending cap. See [model connections](docs/MODEL_CONNECTIONS.md).
 
 Forge never imports `OPENAI_API_KEY` or other paid provider keys. It supports:
 
 - OpenRouter entries currently ending in `:free`, with every catalog price zero.
-  Catalog verification happens before each call; paid fallback is blocked.
+  Catalog verification happens before each call; free-only profiles block paid fallback.
 - An owner-confirmed Groq Free plan, using Qwen 3.8 27B when available. Forge
   never upgrades the account; free quotas can stop a run.
 - A loopback API-compatible local model server, such as Ollama. This uses your own

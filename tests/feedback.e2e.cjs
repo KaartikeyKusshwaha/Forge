@@ -73,12 +73,27 @@ const assert = require("node:assert/strict");
 
     const options = await browser.newPage();
     await options.setContent(fs.readFileSync("extension/options.html", "utf8"));
-    await options.evaluate(() => {window.chrome = {runtime:{sendMessage: async message => ({ok:true, data:message.action === "configuration" ? {paired:true,baseUrl:"http://127.0.0.1:8787"} : {github:true,model:true,runner:true}})}};});
+    await options.evaluate(() => {window.chrome = {runtime:{sendMessage: async message => {
+      if(message.action === "model-profiles") return {ok:true,data:window.savedModels || {profiles:[]}}; if(message.action === "model-connect") {window.modelConnection=message.body;window.savedModels={profiles:[{id:"d".repeat(32),label:"Inkling",active:true,provider:"openrouter-free",mode:message.body.mode,budget_usd:0,model:"thinkingmachines/inkling:free",models:[{id:"thinkingmachines/inkling:free",name:"Inkling",free:true}]}]}; return {ok:true,data:window.savedModels};}
+      return {ok:true,data:message.action === "configuration" ? {paired:true,baseUrl:"http://127.0.0.1:8787"} : {github:true,model:true,runner:true}};
+    }}};});
     await options.addScriptTag({content:fs.readFileSync("extension/options.js","utf8")});
     await options.getByRole("heading", {name:"Connected to Forge"}).waitFor();
     assert.equal(await options.locator("#connection").isVisible(), false);
     await options.getByRole("button", {name:"Change connection",exact:true}).click();
     assert.equal(await options.locator("#connection").isVisible(), true);
+    await options.getByLabel("API key",{exact:true}).fill("sk-or-ui-fixture-not-real");
+    await options.getByRole("button",{name:"Detect, verify & connect",exact:true}).click();
+    await options.getByText("Inkling · Active",{exact:true}).waitFor();
+    assert.equal(await options.locator("#model-key").inputValue(),"");
+    assert.equal((await options.evaluate(()=>window.modelConnection)).mode,"free_only");
+    await options.getByRole("button",{name:"Endpoint",exact:true}).click();
+    assert.equal(await options.locator("#endpoint-fields").isVisible(),true);
+    await options.getByRole("button",{name:"CLI / environment",exact:true}).click();
+    assert.equal(await options.locator("#cli-fields").isVisible(),true);
+    assert.equal(await options.locator("#key-fields").isVisible(),false);
+    await options.getByLabel("Usage permissions",{exact:true}).selectOption("ask_paid");
+    assert.equal(await options.locator("#model-budget-fields").isVisible(),true);
     console.log("PASS repository onboarding, custom task, published history, commit link, follow-up, feedback, keyboard, mobile and pairing");
   } finally {await browser.close();}
 })().catch(error => {console.error(error);process.exitCode=1;});

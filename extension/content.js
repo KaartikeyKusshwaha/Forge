@@ -100,13 +100,13 @@
     const completed = ["awaiting_approval", "publishing", "pr_opened", "demo_complete"].includes(r.status);
     let current = phases.findIndex(([, statuses]) => statuses.includes(r.status));
     if (current < 0) current = completed ? 5 : Math.max(0, phases.findIndex(([, statuses]) => statuses.includes(events.at(-2)?.kind)));
-    return `<div class="phase-track">${phases.map(([name], i) => `<div class="phase ${i < current ? "done" : i === current ? "current" : ""}"><span>${i < current ? icon("check", 12) : i + 1}</span><label>${name}</label></div>`).join("")}</div>
+    return `${r.usage?.awaiting_spend_permission ? `<div class="review-note"><p>A paid API call is waiting for your permission.</p>${button("options", "Review API spending", "secondary")}</div>` : ""}<div class="phase-track">${phases.map(([name], i) => `<div class="phase ${i < current ? "done" : i === current ? "current" : ""}"><span>${i < current ? icon("check", 12) : i + 1}</span><label>${name}</label></div>`).join("")}</div>
       ${r.plan ? `<section class="section"><div class="section-label">THE APPROACH <span>${icon("sparkle", 14)}</span></div><p class="plan-summary">${esc(r.plan.summary)}</p><ol class="plan-steps">${r.plan.steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol></section>` : `<div class="working-card">${icon("code", 23)}<div><strong>${label(r.status)}</strong><p>Gathering the evidence for a focused change.</p></div></div>`}
       ${r.plan ? `<section class="section"><div class="section-label">WHAT GOOD LOOKS LIKE</div><ul class="acceptance">${r.plan.acceptance.map(s => `<li><span>↳</span>${esc(s)}</li>`).join("")}</ul></section>` : ""}
       ${r.index?.files?.length ? `<section class="section"><div class="section-label">RELEVANT FILES <span>${r.index.file_count} indexed</span></div><div class="file-pills">${r.index.files.slice(0, 6).map(f => r.mode === "demo" ? `<span>${icon("file", 12)}${esc(f.path)}</span>` : `<a href="https://github.com/${esc(r.repo)}/blob/${esc(r.context.base_sha)}/${f.path.split("/").map(encodeURIComponent).join("/")}#L${f.start_line}-L${f.end_line}" target="_blank" rel="noopener noreferrer">${icon("file", 12)}${esc(f.path)}</a>`).join("")}</div></section>` : ""}
       <section class="section"><div class="section-label">ACTIVITY <span>${events.length} events</span></div><div class="timeline">${events.slice(-8).map((e, i, a) => `<div class="timeline-item ${i === a.length - 1 ? "latest" : ""}"><span class="timeline-dot"></span><div><p>${esc(e.message)}</p><time>${new Date(e.created * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}</time></div></div>`).join("")}</div></section>
       ${r.review ? `<div class="review-note">${icon("shield", 19)}<div><strong>Reviewer’s note</strong><p>${esc(r.review.summary)}</p>${r.review.findings.map(f => `<p>${esc(f)}</p>`).join("")}</div></div>` : ""}
-      <section class="section"><div class="section-label">EXECUTION RECORD <span>Free access only</span></div><div class="execution-record"><span>Model</span><code>${esc(r.model || "Not called yet")}</code><span>Calls / tokens</span><code>${r.usage?.calls || 0} / ${(r.usage?.tokens || 0).toLocaleString()}</code><span>Base revision</span><code>${esc(r.context?.base_sha?.slice(0, 12) || "Pending")}</code></div></section>`;
+      <section class="section"><div class="section-label">EXECUTION RECORD <span>${r.usage?.pricing?.startsWith("Free") || !r.usage?.pricing ? "Free access only" : "Profile spending policy"}</span></div><div class="execution-record"><span>Model</span><code>${esc(r.model || "Not called yet")}</code><span>Calls / tokens</span><code>${r.usage?.calls || 0} / ${(r.usage?.tokens || 0).toLocaleString()}</code><span>Base revision</span><code>${esc(r.context?.base_sha?.slice(0, 12) || "Pending")}</code></div></section>`;
   }
 
   function changes() {
@@ -139,7 +139,7 @@
 
   function approvalFooter() {
     const r = state.run;
-    if (!r) return `<footer class="bottom-bar"><span class="small-dot"></span> YOUR REPOSITORY. YOUR CALL.<span>v0.3</span></footer>`;
+    if (!r) return `<footer class="bottom-bar"><span class="small-dot"></span> YOUR REPOSITORY. YOUR CALL.<span>v0.4</span></footer>`;
     if (r.status === "awaiting_approval") {
       if (r.mode !== "demo" && r.approval_expires_at && Date.now() / 1000 > r.approval_expires_at) {
         return `<footer class="approval-footer"><div class="approval-label">${icon("clock", 16)}This review window expired. Fresh validation is needed.</div>${button("refresh", "Refresh proposal and checks", "primary wide", "arrow")}<div class="footer-actions">${button("revision", "Suggest changes", "text-button")}${button("reject", "Reject", "text-button")}${button("download", "Download old patch", "text-button")}</div></footer>`;

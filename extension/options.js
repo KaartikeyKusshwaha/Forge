@@ -19,7 +19,55 @@ async function inspect() {
     `Isolated GitHub runner: ${data.runner ? "available" : "sign in to GitHub CLI"}`,
     `Publishing: ${data.publishing ? "enabled after approval" : "disabled"}`
   ]) { const p = document.createElement("div"); p.textContent = line; box.append(p); }
+  document.querySelector("#model-panel").hidden = false;
+  await loadProfiles();
 }
+
+const modelMessage = document.querySelector("#model-message");
+let connectionMethod = "key";
+document.querySelectorAll("[data-method]").forEach(button => button.addEventListener("click", () => {
+  connectionMethod = button.dataset.method;
+  document.querySelectorAll("[data-method]").forEach(item=>item.setAttribute("aria-pressed",String(item===button)));
+  document.querySelector("#endpoint-fields").hidden = connectionMethod !== "endpoint";
+  document.querySelector("#cli-fields").hidden = connectionMethod !== "cli";
+  document.querySelector("#key-fields").hidden = connectionMethod === "cli";
+}));
+document.querySelector("#model-policy").addEventListener("change", event => {
+  document.querySelector("#model-budget-fields").hidden = event.target.value === "free_only";
+});
+
+function profileView(data) {
+  const list = document.querySelector("#model-profiles"); list.replaceChildren();
+  for (const profile of data.profiles || []) {
+    const box = document.createElement("article"); box.className="model-profile";
+    const heading = document.createElement("h3"); heading.textContent=profile.label + (profile.active ? " · Active" : ""); box.append(heading);
+    const info=document.createElement("p"); info.textContent=`${profile.provider} · ${profile.mode} · reserved/spent $${Number(profile.spent_usd || 0).toFixed(6)} / $${Number(profile.budget_usd).toFixed(2)}`; box.append(info);
+    const select=document.createElement("select"); select.setAttribute("aria-label",`Model for ${profile.label}`);
+    for(const model of profile.models) {const option=document.createElement("option");option.value=model.id;option.textContent=model.name + (model.free ? " · Free" : " · Paid");option.selected=model.id===profile.model;select.append(option);} box.append(select);
+    const activate=document.createElement("button"); activate.type="button"; activate.textContent="Use this model";
+    activate.addEventListener("click",async()=>{activate.disabled=true;try {profileView(await call("model-activate",{id:profile.id,model:select.value}));modelMessage.textContent="Model connected. New runs use this profile.";await inspect();}catch(error){modelMessage.textContent=error.message;}finally{activate.disabled=false;}}); box.append(activate);
+    if(!profile.active){const remove=document.createElement("button");remove.type="button";remove.textContent="Remove profile";remove.addEventListener("click",async()=>{try{profileView(await call("model-delete",{id:profile.id}));}catch(error){modelMessage.textContent=error.message;}});box.append(remove);} list.append(box);
+  }
+}
+async function loadProfiles(){profileView(await call("model-profiles"));await loadSpending();}
+async function loadSpending(){
+  const data=await call("model-spending"), list=document.querySelector("#model-spending");list.replaceChildren();
+  if(!data.requests?.length){list.textContent="No API spending requests awaiting permission.";return;}
+  for(const request of data.requests){const box=document.createElement("article");box.className="model-profile";const text=document.createElement("p");text.textContent=`${request.role} · Run ${request.run_id || "connection test"} · maximum $${Number(request.maximum_usd).toFixed(6)}`;box.append(text);
+    for(const approve of [true,false]){const button=document.createElement("button");button.type="button";button.textContent=approve ? "Approve this API call" : "Decline";button.addEventListener("click",async()=>{button.disabled=true;try{await call("model-decide",{id:request.id,approve});await loadSpending();}catch(error){modelMessage.textContent=error.message;}});box.append(button);}list.append(box);
+  }
+}
+document.querySelector("#model-connection").addEventListener("submit",async event=>{
+  event.preventDefault();if(!event.isTrusted)return;
+  const button=event.target.querySelector('button[type="submit"]');button.disabled=true;modelMessage.textContent="Detecting provider and checking model access…";
+  try{
+    const mode=document.querySelector("#model-policy").value;
+    const body={api_key:connectionMethod === "cli" ? "" : document.querySelector("#model-key").value,provider:document.querySelector("#model-provider").value,label:document.querySelector("#model-label").value,mode,budget_usd:mode === "free_only" ? 0 : Number(document.querySelector("#model-budget").value),groq_confirmed:document.querySelector("#model-groq-confirmed").checked,
+      endpoint:connectionMethod === "endpoint" ? document.querySelector("#model-endpoint").value : "",command:connectionMethod === "cli" ? document.querySelector("#model-command").value : "",environment:connectionMethod === "cli" ? document.querySelector("#model-environment").value : ""};
+    profileView(await call("model-connect",{body}));document.querySelector("#model-key").value="";document.querySelector("#model-command").value="";modelMessage.textContent="Connected. Forge selected a compatible model; change it in your saved profile if needed.";await inspect();
+  }catch(error){modelMessage.textContent=error.message;}finally{button.disabled=false;}
+});
+setInterval(()=>{if(!document.querySelector("#model-panel").hidden)loadSpending().catch(()=>{});},5000);
 document.querySelector("#change-connection").addEventListener("click", () => {
   document.querySelector("#connection").hidden = false;
   document.querySelector("#connected").hidden = true;

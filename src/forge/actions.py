@@ -18,6 +18,10 @@ from forge.policy import PolicyError, safe_path
 class ActionsSandbox:
     def __init__(self, config: Settings):
         self.config = config
+        self.source = None
+
+    def set_source(self, context, files):
+        self.source = (context["repo"], context["base_sha"], files.copy())
 
     @staticmethod
     def available() -> bool:
@@ -65,10 +69,22 @@ class ActionsSandbox:
         raw = json.dumps(files, sort_keys=True, separators=(",", ":")).encode()
         if len(raw) > 50_000_000 or len(files) > 10_000:
             raise PolicyError("Snapshot exceeds the supported runner limits.")
-        packed = base64.b64encode(gzip.compress(raw)).decode()
+        source = {}
+        envelope = raw
+        if self.source:
+            source_repo, source_sha, original = self.source
+            GitHub.validate_repo(source_repo)
+            if not __import__("re").fullmatch(r"[a-f0-9]{40}", source_sha):
+                raise PolicyError("Remote checks require a pinned public source commit.")
+            edits = {
+                p: files.get(p) for p in original.keys() | files.keys() if original.get(p) != files.get(p)
+            }
+            envelope = json.dumps({"edits": edits}, sort_keys=True, separators=(",", ":")).encode()
+            source = {"source_repo": source_repo, "source_sha": source_sha}
+        packed = base64.b64encode(gzip.compress(envelope)).decode()
         if len(packed) > 58_000:
             raise PolicyError(
-                "Compressed snapshot exceeds the GitHub dispatch limit. Choose a smaller repository or subtree; no local execution fallback exists."
+                "Proposed file changes exceed the runner message limit. Request a smaller patch; no local execution fallback exists."
             )
         request_id = uuid.uuid4().hex
         digest = hashlib.sha256(raw).hexdigest()
@@ -81,6 +97,7 @@ class ActionsSandbox:
                     "profile": profile,
                     "snapshot": packed,
                     "digest": digest,
+                    **source,
                 },
             },
         )

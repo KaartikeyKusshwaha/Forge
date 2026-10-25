@@ -45,6 +45,9 @@ class Worker:
         self.owner = uuid.uuid4().hex
 
     def run_once(self) -> bool:
+        from forge.models import ModelVault
+
+        ModelVault(self.config).load_active()
         self.store.recover()
         run = self.store.claim(self.owner)
         if not run:
@@ -137,6 +140,8 @@ class Worker:
             )
             files = github.snapshot(context)
             sandbox = ActionsSandbox(self.config)
+            if hasattr(sandbox, "set_source"):
+                sandbox.set_source(context, files)
             model = verify_free(self.config)["id"]
         if run.get("feedback"):
             context["owner_feedback"] = run["feedback"]
@@ -193,7 +198,15 @@ class Worker:
             raise PolicyError(
                 "Baseline collected no tests. Configure a supported test profile before asking Forge to edit."
             )
-        usage = {"calls": 0, "tokens": 0, "cost": 0, "pricing": "Free-only model access"}
+        usage = {
+            "calls": 0,
+            "tokens": 0,
+            "cost": 0,
+            "run_id": run_id,
+            "pricing": "Free-only model access"
+            if self.config.model_usage_mode == "free_only"
+            else "Owner-authorized profile spending policy",
+        }
         provider_config = (
             self.config.model_copy(update={"llm_model": model}) if mode != "demo" else self.config
         )

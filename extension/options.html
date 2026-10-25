@@ -16,5 +16,24 @@
   <p id="message" role="status" aria-live="polite"></p>
   <section id="capabilities" hidden></section>
   <section id="github-setup" hidden><button id="connect-github" type="button">Connect GitHub App <span aria-hidden="true">↗</span></button><p class="hint" style="margin:12px 0">Create and install your own App through GitHub. Its private key returns directly to the local service.</p></section>
-  <footer><span class="dot"></span> Free models only. Human approval, always.</footer>
+  <section id="model-panel" hidden>
+    <h2>Models &amp; API keys</h2>
+    <p>Connect a key to discover compatible models automatically. Save multiple profiles and choose which Forge uses.</p>
+    <div class="connection-modes" role="group" aria-label="Model connection method"><button type="button" data-method="key" aria-pressed="true">API key</button><button type="button" data-method="endpoint" aria-pressed="false">Endpoint</button><button type="button" data-method="cli" aria-pressed="false">CLI / environment</button></div>
+    <form id="model-connection">
+      <div id="endpoint-fields" hidden><label for="model-endpoint">Official provider endpoint</label><input id="model-endpoint" type="url" placeholder="https://openrouter.ai/api/v1"><p class="hint">Use an official OpenRouter/Groq URL with its key, or a local model URL such as http://127.0.0.1:11434/v1 without a key. Local proxies must not forward to paid services.</p></div>
+      <div id="cli-fields" hidden><label for="model-environment">Use a key from the local service</label><select id="model-environment"><option value="">Or paste a curl configuration below</option><option value="OPENROUTER_API_KEY">OPENROUTER_API_KEY</option><option value="GROQ_API_KEY">GROQ_API_KEY</option></select><label for="model-command">Provider curl example</label><textarea id="model-command" spellcheck="false" autocomplete="off" maxlength="12000" rows="4" placeholder="curl https://openrouter.ai/api/v1/models -H 'Authorization: Bearer YOUR_KEY'"></textarea><p class="hint">Parsed as configuration only. Nothing is executed. No installers or arbitrary shell scripts.</p></div>
+      <div id="key-fields"><label for="model-key">API key</label><input id="model-key" type="password" autocomplete="off" placeholder="Paste your provider key"><p class="hint">Sent only to your local backend and the detected official provider. Never stored in the extension.</p></div>
+      <details><summary>Provider override for ambiguous keys</summary><label for="model-provider">Provider</label><select id="model-provider"><option value="auto">Detect automatically</option><option value="openrouter-free">OpenRouter</option><option value="groq-free">Groq</option></select></details>
+      <label for="model-policy">Usage permissions</label><select id="model-policy"><option value="free_only">Free limits only</option><option value="ask_paid">Ask before every paid API call</option><option value="capped">Paid API calls allowed within my cap</option></select>
+      <div id="model-budget-fields" hidden><label for="model-budget">Lifetime cap for this profile (USD)</label><input id="model-budget" type="number" min="0.01" max="1000" step="0.01" value="1"><p class="hint">Applies to Forge's model calls, not other apps using this key. No credit purchases or auto-recharge. Uncertain costs remain reserved.</p></div>
+      <label class="check-label"><input id="model-groq-confirmed" type="checkbox">If this is a Groq key, I confirm its account is on the Free plan.</label>
+      <label for="model-label">Profile name (optional)</label><input id="model-label" maxlength="100" placeholder="My coding model">
+      <button type="submit">Detect, verify &amp; connect</button>
+    </form>
+    <p id="model-message" role="status" aria-live="polite"></p>
+    <div id="model-profiles"></div>
+    <h3>Paid usage permissions</h3><p>When a run needs a paid API call, approve its reserved maximum here. Requests expire after five minutes.</p><div id="model-spending"></div>
+  </section>
+  <footer><span class="dot"></span> Free usage by default. Human approval for repository changes.</footer>
 </main><script src="options.js"></script></body></html>

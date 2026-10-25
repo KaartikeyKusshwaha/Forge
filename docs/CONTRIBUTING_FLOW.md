@@ -23,7 +23,7 @@ Forge snapshots the selected repository, runs its baseline in the isolated Actio
 runner, and only proceeds through planning, coding, regression checks, and review
 when the supported workflow permits it. No repository code executes on your host.
 The current runner accepts Python/Node profiles, with no automatic dependency
-installation and a 58 KB compressed snapshot dispatch limit. Blender runtime tests
+installation and a 58 KB compressed change-overlay limit. Source is fetched at the pinned public commit inside the VM and verified against the expected source digest (50 MB archive/expanded-source limit). Blender runtime tests
 are not supported. Unsupported or oversized projects can be analyzed but may stop
 before generating a verified candidate. These limits remain visible in the panel.
 

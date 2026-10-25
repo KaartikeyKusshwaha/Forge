@@ -17,6 +17,12 @@ function allowedRequest(message) {
   switch (message.action) {
     case "status": return ["GET", "/api/status"];
     case "models": return ["GET", "/api/models"];
+    case "model-profiles": return ["GET", "/api/model-profiles"];
+    case "model-connect": return ["POST", "/api/model-profiles", message.body];
+    case "model-activate": if (/^[a-f0-9]{32}$/.test(message.id || "")) return ["POST", "/api/model-profiles/" + message.id + "/activate", {model:message.model || null}]; break;
+    case "model-delete": if (/^[a-f0-9]{32}$/.test(message.id || "")) return ["DELETE", "/api/model-profiles/" + message.id]; break;
+    case "model-spending": return ["GET", "/api/model-spending"];
+    case "model-decide": if (/^[a-f0-9]{32}$/.test(message.id || "")) return ["POST", "/api/model-spending/" + message.id, {approve:message.approve === true}]; break;
     case "github-setup": return ["POST", "/api/setup/github"];
     case "list": return ["GET", "/api/runs" + (Number.isFinite(message.before) ? "?before=" + encodeURIComponent(message.before) : "")];
     case "analyze-repo":
@@ -56,6 +62,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     return false;
   }
   (async () => {
+    if (message.action.startsWith("model-") && !trustedOptions) throw new Error("Manage provider keys and API spending from extension settings only.");
     if (message.action === "options") {
       await chrome.runtime.openOptionsPage();
       return {opened: true};
@@ -86,7 +93,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     try {
       response = await fetch(endpoint(config.baseUrl) + path, {method,
         headers: {Authorization: `Bearer ${config.token}`, "Content-Type": "application/json"},
-        ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(30_000),
+        ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(message.action.startsWith("model-") ? 60_000 : 30_000),
         credentials: "omit", redirect: "error"});
     } catch {
       throw new Error("Forge is offline. Start the local service, then reconnect.");

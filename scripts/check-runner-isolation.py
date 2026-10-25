@@ -37,4 +37,23 @@ for profile, files, expected in [("python", {"test_isolation.py": python_tests},
     assert result["exit_code"] == 0 and result["count"] == expected, result["output"]
     reports.append({"profile": profile, **result})
 Path("test-results/runner-isolation.json").write_text(json.dumps({"passed": True, "checks": reports}, indent=2))
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from forge.snapshot import public_snapshot
+
+source_repo = "KaartikeyKusshwaha/Forge-Acceptance"
+source_sha = "683ff962c5a8d27f9ab8d3c85ba71e012b8797ce"
+files = public_snapshot(source_repo, source_sha)
+edits = {"test_transport.py": "import os\ndef test_remote_overlay(): assert os.getuid() == 65534\n"}
+files.update(edits)
+raw = json.dumps(files, sort_keys=True, separators=(",", ":")).encode()
+envelope = json.dumps({"edits": edits}).encode()
+os.environ.update(FORGE_REQUEST_ID=uuid.uuid4().hex, FORGE_PROFILE="python",
+    FORGE_SNAPSHOT=base64.b64encode(gzip.compress(envelope)).decode(),
+    FORGE_SNAPSHOT_DIGEST=hashlib.sha256(raw).hexdigest(),
+    FORGE_SOURCE_REPO=source_repo, FORGE_SOURCE_SHA=source_sha)
+runpy.run_path("scripts/actions-check.py", run_name="__main__")
+result = json.loads(Path("test-results/result.json").read_text())
+assert result["exit_code"] == 0 and result["count"] >= 3, result["output"]
+Path("test-results/source-transport.json").write_text(json.dumps(result, indent=2))
 print("PASS: real offline/non-root/read-only Python and TypeScript execution; no Docker.")

@@ -47,6 +47,18 @@ def free_models() -> list[dict]:
 
 
 def verify_free(config: Settings) -> dict:
+    if config.model_profile_id and config.model_usage_mode != "free_only":
+        from forge.models import ENDPOINTS, discover
+
+        if config.llm_base_url != ENDPOINTS.get(config.llm_provider):
+            raise PolicyError("Model endpoint does not match the saved provider.")
+        _, models = discover(
+            config.llm_api_key, config.llm_provider, config.model_usage_mode, config.groq_free_plan_confirmed
+        )
+        selected = next((m for m in models if m["id"] == config.llm_model), None)
+        if not selected:
+            raise PolicyError("Selected model no longer meets the saved usage policy.")
+        return selected
     if config.llm_provider == "groq-free":
         if not config.groq_free_plan_confirmed or config.llm_base_url != "https://api.groq.com/openai/v1":
             raise PolicyError("Groq requires owner confirmation of its Free plan and the official endpoint.")
@@ -120,10 +132,20 @@ class Provider:
         if "response_format" in selected.get("parameters", []):
             body["response_format"] = {"type": "json_object"}
         if self.config.llm_provider == "openrouter-free":
-            body["provider"] = {"max_price": {"prompt": 0, "completion": 0}}
+            prices = selected.get("prices", {})
+            rates = {k: prices.get(k, 0) for k in ("prompt", "completion")}
+            body["provider"] = {"max_price": {k: v * 1_000_000 for k, v in rates.items()}}
+            body["provider"]["max_price"]["request"] = 0
+            if "reasoning" in selected.get("parameters", []):
+                body["reasoning"] = {"effort": "medium", "exclude": True}
         if self.config.llm_provider == "groq-free" and selected["id"].startswith("qwen/"):
             body["reasoning_format"] = "hidden"
         response = None
+        vault = None
+        if self.config.model_profile_id:
+            from forge.models import ModelVault
+
+            vault = ModelVault(self.config)
         for attempt in range(3):
             if self.cancelled():
                 raise PolicyError("Run cancelled.")
@@ -132,6 +154,21 @@ class Provider:
                 or self.usage["tokens"] + reservation > self.config.max_tokens
             ):
                 raise PolicyError("Model retry would exceed the reserved call or token budget.")
+            reservation_id = None
+            if vault:
+                prices = selected.get("prices", {})
+                # UTF-8 bytes conservatively bound text tokens; add framing overhead.
+                input_bound = len((SYSTEM + instructions + text).encode()) + 4096
+                amount = input_bound * prices.get("prompt", 0) + self.config.max_output_tokens * prices.get(
+                    "completion", 0
+                )
+                self.usage["awaiting_spend_permission"] = bool(
+                    amount and self.config.model_usage_mode == "ask_paid"
+                )
+                self.persist_usage(self.usage.copy())
+                reservation_id = vault.reserve(amount, role, self.usage.get("run_id", ""), self.cancelled)
+                self.usage["awaiting_spend_permission"] = False
+                self.persist_usage(self.usage.copy())
             self.usage["calls"] += 1
             self.usage["tokens"] += reservation
             self.persist_usage(self.usage.copy())
@@ -144,6 +181,11 @@ class Provider:
                         else {},
                         json=body,
                     )
+                if vault:
+                    try:
+                        vault.settle(reservation_id, response.json().get("usage", {}).get("cost"))
+                    except ValueError:
+                        pass  # Keep the full reservation when the provider omits usable cost evidence.
                 if response.status_code not in {429, 502, 503, 504}:
                     break
             except httpx.HTTPError:
@@ -164,9 +206,17 @@ class Provider:
                 f"Model provider rejected the request (HTTP {response.status_code if response else 'unknown'}). Check model and credentials."
             )
         data = response.json()
-        if data.get("usage", {}).get("cost", 0) not in (0, None):
+        if (not self.config.model_profile_id or self.config.model_usage_mode == "free_only") and data.get(
+            "usage", {}
+        ).get("cost", 0) not in (
+            0,
+            None,
+        ):
             raise PolicyError("Provider reported a nonzero cost. Further execution is blocked.")
         actual = data.get("usage", {}).get("total_tokens")
+        reported_cost = data.get("usage", {}).get("cost")
+        if isinstance(reported_cost, (float, int)) and reported_cost >= 0:
+            self.usage["cost"] = self.usage.get("cost", 0) + reported_cost
         # Keep the conservative reservation when a provider omits usage.
         if isinstance(actual, int) and actual > 0:
             self.usage["tokens"] += actual - reservation

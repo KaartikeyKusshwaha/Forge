@@ -4,9 +4,13 @@ For public repository onboarding, fork contributions, commit history and follow-
 requests, see [the contribution workflow](CONTRIBUTING_FLOW.md).
 
 Forge is inside GitHub. There is no separate website to visit.
-The local service is configured with your confirmed Groq Free-plan key and Qwen
-3.8 27B. Docker is not used. Only the owned dummy acceptance repository is
-allowlisted; publishing still requires your approval of the exact proposal.
+The current model selection is OpenRouter's free Inkling route. Add your OpenRouter
+key in **Models & API keys** to activate it. The previous Groq configuration remains
+in a private local backup. Docker is not used. Repository selections are explicit;
+publishing still requires approval of the exact proposal.
+
+See [model connections](MODEL_CONNECTIONS.md) for API-key, endpoint and CLI/environment
+options, multiple profiles, and spending permission modes.
 
 ## Load the companion
 

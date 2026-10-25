@@ -2,11 +2,9 @@
 
 import base64
 import hashlib
-import io
 import json
 import re
 import subprocess
-import tarfile
 import time
 from pathlib import Path
 
@@ -14,7 +12,8 @@ import httpx
 import jwt
 
 from forge.config import Settings
-from forge.policy import PolicyError, eligible, fingerprint, safe_path
+from forge.policy import PolicyError, fingerprint, safe_path
+from forge.snapshot import read_archive
 
 
 class GitHubError(Exception):
@@ -76,7 +75,7 @@ class GitHub:
         issues = self.request("GET", f"/repos/{repo}/issues", token, params={"state": "open", "per_page": 30})
         limits = [
             "Execution supports Python/Node test profiles without automatic dependency installation.",
-            "Runner payload is limited to 58 KB compressed; large snapshots stop without execution.",
+            "The VM fetches the pinned public source. Proposed changes must fit the 58 KB compressed message limit; source archives are capped at 50 MB.",
         ]
         if "blender" in repo.lower():
             limits.append(
@@ -435,39 +434,6 @@ class GitHub:
             pr_url=pr["html_url"],
             pr_number=pr["number"],
         )
-
-
-def read_archive(content: bytes) -> dict[str, str]:
-    files, size, count = {}, 0, 0
-    with tarfile.open(fileobj=io.BytesIO(content), mode="r:gz") as archive:
-        for member in archive:
-            count += 1
-            if count > 10_000:
-                raise PolicyError("Repository exceeds 10,000 entries.")
-            path = member.name.partition("/")[2]
-            if not path or member.isdir():
-                continue
-            safe_path(path)
-            if not member.isfile():
-                raise PolicyError("Symlinks, submodules, and special files are unsupported in this pilot.")
-            size += member.size
-            if size > 50_000_000:
-                raise PolicyError("Expanded repository exceeds 50 MB.")
-            if member.size > 500_000 or not eligible(path):
-                continue
-            source = archive.extractfile(member)
-            if source is None:
-                continue
-            raw = source.read(500_001)
-            if b"\x00" in raw:
-                continue
-            try:
-                files[path] = raw.decode("utf-8")
-            except UnicodeDecodeError:
-                continue
-    if not files:
-        raise PolicyError("No supported source text found.")
-    return files
 
 
 def demo_context() -> tuple[dict, dict]:
