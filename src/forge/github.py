@@ -352,7 +352,9 @@ class GitHub:
                 raise PolicyError("Fork ownership or upstream identity could not be verified.")
         write_root = f"/repos/{write_repo}"
         if publication.get("write_repo", write_repo) != write_repo:
-            raise PolicyError("Publication account or target changed. Review a fresh proposal before retrying.")
+            raise PolicyError(
+                "Publication account or target changed. Review a fresh proposal before retrying."
+            )
         head = branch if write_repo == run["repo"] else write_repo.split("/")[0] + ":" + branch
         commit_sha = publication.get("commit_sha")
         if not commit_sha:
