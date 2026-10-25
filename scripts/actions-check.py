@@ -57,6 +57,9 @@ with tempfile.TemporaryDirectory(prefix="forge-isolated-", dir="/tmp") as direct
         if parent.is_dir():
             parent.chmod(0o777)
     def isolated(command, stage, writable, limit="16M", offline=True):
+        scratch = Path(writable[0]) / (".forge-tmp-" + stage)
+        scratch.mkdir(exist_ok=True)
+        scratch.chmod(0o777)
         service = ["sudo", "systemd-run", "--quiet", "--wait", "--pipe", "--collect",
             "--unit=forge-" + request_id + "-" + stage,
             "--property=User=nobody", "--property=Group=nogroup", "--property=PrivateNetwork=" + ("yes" if offline else "no"),
@@ -67,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix="forge-isolated-", dir="/tmp") as direct
             "--property=WorkingDirectory=" + directory,
             "--property=ReadWritePaths=" + " ".join(map(str, writable)),
             "--property=InaccessiblePaths=/home /root /run/docker.sock",
-            "--setenv=HOME=/nonexistent", "--setenv=PYTHONDONTWRITEBYTECODE=1",
+            "--setenv=HOME=/nonexistent", "--setenv=TMPDIR=" + str(scratch), "--setenv=PYTHONDONTWRITEBYTECODE=1",
             "--setenv=PIP_CONFIG_FILE=/dev/null", *(["--setenv=PIP_NO_INDEX=1"] if offline else []), "--", *command]
         try:
             with tempfile.TemporaryFile() as log:
