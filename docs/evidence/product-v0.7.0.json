@@ -1,0 +1,22 @@
+{
+  "ci": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40239155613",
+  "runner_fixtures": [
+    "python isolation",
+    "installed Python project",
+    "Node TypeScript",
+    "locked npm install without lifecycle hooks",
+    "npm disposable lock + offline build + real Chromium",
+    "pnpm dependencies and tests",
+    "Yarn dependencies and tests",
+    "pinned public source transport"
+  ],
+  "ui_tests": [
+    "typing with hostile page shortcut",
+    "persistent composer",
+    "native extension connection page configuration",
+    "history end/forget/delete actions",
+    "three usage policy selection",
+    "provider environment setup"
+  ],
+  "credentials_bundled": false
+}

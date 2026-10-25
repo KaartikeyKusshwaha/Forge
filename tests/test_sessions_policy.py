@@ -109,3 +109,41 @@ def test_unknown_provider_connects_in_unlimited_mode_without_price_prompts(setup
     )
     assert response.status_code == 200 and "setup" not in response.json()
     assert config.model_usage_mode == "unlimited" and config.llm_model == "new-coder"
+
+
+def test_limited_policy_is_enforced_by_the_real_provider_call_path(setup, monkeypatch):
+    import httpx
+
+    from forge.llm import Provider
+
+    config, store, client = setup
+    policy_profile(config, "limited", calls=1)
+    monkeypatch.setattr("forge.llm.verify_free", lambda _: {"id": "coder", "parameters": [], "prices": {}})
+    sent = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def post(self, url, **kwargs):
+            sent.append(url)
+            return httpx.Response(
+                200, json={"choices": [{"message": {"content": "{}"}}], "usage": {"total_tokens": 10}}
+            )
+
+    monkeypatch.setattr("forge.llm.httpx.Client", Client)
+    config.max_output_tokens = 512
+    for attempt in range(2):
+        p = Provider(config, {"calls": 0, "tokens": 0}, lambda _: None, lambda: False)
+        if not attempt:
+            assert p.ask("diagnostic", "Check", {}) == {}
+        else:
+            with pytest.raises(PolicyError, match="limit"):
+                p.ask("setup-helper", "Help", {})
+    assert len(sent) == 1
