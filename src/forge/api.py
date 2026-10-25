@@ -43,6 +43,11 @@ class Revision(BaseModel):
     request_key: str = Field(min_length=12, max_length=100)
 
 
+class ChatMessage(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    request_key: str = Field(min_length=12, max_length=100)
+
+
 class RepositoryRequest(BaseModel):
     repo: str = Field(max_length=200)
     enable: bool = False
@@ -90,7 +95,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     async def lifespan(app):
         yield
 
-    app = FastAPI(title="Forge", version="0.5.2", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Forge", version="0.6.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
     app.state.store = db
     vault = ModelVault(config)
@@ -152,7 +157,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
 
     @app.get("/health")
     def health():
-        return {"service": "forge", "version": "0.5.2", "status": "ok"}
+        return {"service": "forge", "version": "0.6.0", "status": "ok"}
 
     @app.get("/api/status", dependencies=[Depends(authenticated)])
     def status():
@@ -238,6 +243,46 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     def model_spend_decision(request_id: str, body: SpendDecision):
         vault.decide(request_id, body.approve)
         return vault.pending()
+
+    @app.post("/api/conversations", status_code=201, dependencies=[Depends(authenticated)])
+    def new_conversation(body: NewRun):
+        GitHub.validate_repo(body.repo)
+        if body.mode != "github":
+            raise HTTPException(422, "Conversations require a repository context.")
+        return db.create(
+            body.repo,
+            body.issue,
+            dict(
+                mode="github",
+                conversation_only=True,
+                request=body.request.strip(),
+                title=f"Conversation · {body.repo}",
+                checks=[],
+                chat=[],
+                usage={"calls": 0, "tokens": 0, "cost": 0},
+            ),
+            body.request_key,
+            status="needs_input",
+        )
+
+    @app.post("/api/runs/{run_id}/chat", dependencies=[Depends(authenticated)])
+    @model_serialized
+    def chat_run(run_id: str, body: ChatMessage):
+        from forge.chat import prepare, reply
+
+        get_run(run_id)
+        message = body.message.strip()
+        if not message:
+            raise HTTPException(422, "Type a message for Forge.")
+        run, created = prepare(db, run_id, message, body.request_key)
+        if created:
+            threading.Thread(
+                target=reply,
+                args=(db, config.model_copy(deep=True), run_id, body.request_key),
+                daemon=True,
+                name="forge-chat-" + run_id[:8],
+            ).start()
+        return run
 
     @app.post("/api/runs/{run_id}/diagnose", dependencies=[Depends(authenticated)])
     def diagnose_run(run_id: str):
@@ -336,7 +381,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
                 {
                     k: v
                     for k, v in r.items()
-                    if k not in {"candidate", "context", "checks", "index", "pull_history"}
+                    if k not in {"candidate", "context", "checks", "index", "pull_history", "chat"}
                 }
             )
         return {"runs": result, "next_cursor": result[-1]["created"] if len(result) == 50 else None}

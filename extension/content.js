@@ -37,7 +37,7 @@
     return response.data;
   };
   const state = {open: false, tab: "progress", run: null, service: null, error: "", busy: false,
-    history: null, historyCursor: null, historyFilter: "all", analysis: null, task: "", pullHistory: null, confirm: false, revision: false, feedback: "", route: location.pathname, selectedFile: 0, selectedCheck: 0};
+    history: null, historyCursor: null, historyFilter: "all", analysis: null, task: "", pullHistory: null, confirm: false, revision: false, feedback: "", chatDrafts: {}, route: location.pathname, selectedFile: 0, selectedCheck: 0};
   let timer;
   const activeStatuses = ["queued", "snapshotting", "indexing", "baseline", "planning", "coding", "testing", "validating", "reviewing", "repairing", "publishing"];
   const phases = [
@@ -73,6 +73,7 @@
         <h2>${esc(ctx.issue ? title || "GitHub issue #" + ctx.issue : "Open an issue to begin")}</h2>
         <p>${esc(ctx.repo || "github.com")} <span>·</span> ${ctx.issue ? "Default branch" : "GitHub companion"}</p>
       </div>
+      ${ctx.repo ? button("open-chat", "Talk to Forge", "primary wide", "sparkle") : ""}
       ${ctx.repo ? `<p class="tab-intro">Enable this public repository to allow source analysis and free model processing. Publishing always needs separate approval.</p>${button("analyze-repo", state.analysis?.enabled ? "Refresh repository analysis" : "Enable and analyze repository", "secondary wide", "code")}` : ""}
       ${state.analysis ? `<section class="section"><div class="section-label">REPOSITORY ANALYSIS <span>${state.analysis.file_count} files</span></div><p>${esc(state.analysis.description || "Public repository")}</p><p class="tab-intro">Pinned revision ${esc(state.analysis.base_sha.slice(0,12))} · ${state.analysis.tests.length} test paths shown</p>${state.analysis.limitations.map(l=>`<p class="limitation">${esc(l)}</p>`).join("")}<details><summary>Contribution and project configuration</summary>${state.analysis.guides.map(g=>`<h3>${esc(g.path)}</h3><pre class="guide-text">${esc(g.text)}</pre>`).join("") || '<p>No root contribution guide or package configuration found.</p>'}</details><h3>Choose an open issue</h3><div class="repository-issues">${state.analysis.issues.map(i=>`<a href="https://github.com/${esc(ctx.repo)}/issues/${i.number}">#${i.number} ${esc(i.title)}</a>`).join("") || '<p>No open issues in the first 30 results.</p>'}</div><label class="revision-label" for="forge-task">Or describe your contribution</label><textarea id="forge-task" maxlength="4000" placeholder="Describe a specific bug, improvement, or test to add…">${esc(state.task)}</textarea>${button("start-task", "Analyze my task and propose changes", "primary wide", "arrow")}</section>` : ""}
       ${ctx.issue ? button("start", "Start Forge on this issue", "primary wide", "arrow") : ""}
@@ -173,33 +174,46 @@
     return `<div class="history-heading"><p class="eyebrow">RUNS & PULL REQUESTS</p><h1>A trail of progress.</h1><p class="tab-intro">Choose a run to inspect its changes, checks and full timeline.</p><div class="history-filters">${button("history-all", "All requests", state.historyFilter === "all" ? "primary" : "secondary")}${button("history-published", "Commits & pull requests", state.historyFilter === "published" ? "primary" : "secondary")}</div></div><div class="history-list">${runs.length ? runs.map(r => `<button class="history-row" data-run="${r.id}"><span class="history-run-icon">${icon(r.status === "pr_opened" || r.status === "demo_complete" ? "check" : "code", 17)}</span><div><strong>${esc(r.title)}</strong><p>${esc(r.repo)} · ${r.issue ? "issue #" + r.issue : "Custom task"}</p><span>${label(r.status)}${r.mode === "demo" ? " · Demo" : ""}${r.publication?.pr_url ? ` · PR #${esc(r.publication.pr_url.split("/").at(-1))}${r.pr_state ? " · " + esc(r.pr_state) : ""}` : ""}</span><time>${esc(new Date(r.created * 1000).toLocaleString())}</time></div>${icon("chevron", 15)}</button>`).join("") : '<div class="empty-state"><h2>A fresh start.</h2><p>Your proposals and pull requests will appear here.</p></div>'}</div>${state.historyCursor ? button("history-more", "Load older requests", "secondary wide", "history") : ""}`;
   }
 
+  function chatView() {
+    const turns = state.run.chat || [];
+    return `<section class="agent-conversation"><div class="section-label">YOUR AGENT</div><p class="tab-intro">Ask about this run, explain what you want, or work through an idea. Build from conversation turns your instructions into a new checked proposal.</p><div class="chat-messages" role="log" aria-label="Agent conversation">${turns.length ? turns.map(t => `<article class="chat-message user"><strong>You</strong><p>${esc(t.message)}</p></article><article class="chat-message assistant"><strong>Forge</strong><p ${t.error ? 'role="alert"' : ""}>${esc(t.status === "pending" ? (Date.now()/1000-t.created > 900 ? "Reply interrupted. Send another message to continue." : "Thinking…") : t.error || t.reply)}</p>${t.error ? button("options", "Check model connection", "text-button") : t.usage?.awaiting_spend_permission ? button("options", "Review spending permission", "text-button") : ""}</article>`).join("") : '<div class="chat-welcome"><h2>What would you like to do?</h2><p>Describe a change, ask why a check failed, or refine the approach.</p></div>'}</div></section>`;
+  }
+
+  function chatComposer() {
+    const pending = (state.run.chat || []).some(t => t.status === "pending" && Date.now()/1000-t.created < 900);
+    const canBuild = ["awaiting_approval","pr_opened","rejected","failed","cancelled","stale","needs_input"].includes(state.run.status) && state.run.mode !== "demo";
+    return `<section class="chat-composer" aria-label="Talk to Forge"><label for="forge-chat">Message Forge</label><textarea id="forge-chat" rows="2" maxlength="4000" placeholder="Ask about this change, or describe what you want…">${esc(state.chatDrafts[state.run.id] || "")}</textarea><div class="chat-actions"><span>${pending ? "Forge is thinking…" : "Ctrl / Cmd + Enter to send"}</span><button type="button" class="primary" data-action="send-chat" ${pending || state.busy ? "disabled" : ""}>Send</button>${canBuild ? button("build-chat", "Build from conversation", "secondary") : ""}</div><p>Chat does not change files. Build reads public source; publication needs approval.</p></section>`;
+  }
+
   function render() {
     const focusAction = root.activeElement?.dataset?.action;
-    const feedbackFocused = root.activeElement?.id === "forge-feedback";
+    const focusedInput = ["forge-feedback", "forge-chat"].includes(root.activeElement?.id) ? root.activeElement.id : null;
+    const feedbackFocused = Boolean(focusedInput);
     const selection = feedbackFocused ? [root.activeElement.selectionStart, root.activeElement.selectionEnd] : null;
     const scrollTop = root.querySelector(".panel-body")?.scrollTop || 0;
     const top = `<header class="topbar"><div class="wordmark"><span class="brand-mark">${icon("forge", 21)}</span><strong>forge</strong><span class="product-tag">GITHUB COMPANION</span></div><div class="top-actions">${button("history", '<span class="sr-only">Recent runs</span>', "icon-button", "history")}${button("options", '<span class="sr-only">Connection settings</span>', "icon-button", "settings")}${button("close", '<span class="sr-only">Close Forge</span>', "icon-button", "close")}</div></header>`;
     surface.innerHTML = `<button class="launcher ${state.open ? "hidden" : ""}" data-action="open" aria-label="Open Forge">${icon("forge", 20)}<strong>Forge</strong><span class="launcher-dot"></span></button>
       <aside class="panel ${state.open ? "is-open" : ""}" aria-label="Forge engineering companion" ${state.open ? "" : "inert"}>
       ${top}${state.error ? `<div class="error-banner" role="alert">${icon("warn", 16)}<span>${esc(state.error)}</span>${button("dismiss", '<span class="sr-only">Dismiss message</span>', "icon-button", "close")}</div>` : ""}
-      ${state.run && !state.history ? runHeader() + `<div class="tabs" role="tablist" aria-label="Run views">${["progress", "changes", "checks", "timeline"].map(t => `<button role="tab" aria-selected="${state.tab === t}" tabindex="${state.tab === t ? 0 : -1}" data-tab="${t}" id="forge-tab-${t}" aria-controls="forge-tabpanel">${t[0].toUpperCase() + t.slice(1)}${t === "changes" && state.run.candidate ? `<span>${state.run.candidate.changes.length}</span>` : ""}</button>`).join("")}</div>` : ""}
+      ${state.run && !state.history ? runHeader() + `<div class="tabs" role="tablist" aria-label="Run views">${["chat", "progress", "changes", "checks", "timeline"].map(t => `<button role="tab" aria-selected="${state.tab === t}" tabindex="${state.tab === t ? 0 : -1}" data-tab="${t}" id="forge-tab-${t}" aria-controls="forge-tabpanel">${t[0].toUpperCase() + t.slice(1)}${t === "changes" && state.run.candidate ? `<span>${state.run.candidate.changes.length}</span>` : ""}</button>`).join("")}</div>` : ""}
       <div class="panel-body" ${state.run && !state.history ? `role="tabpanel" id="forge-tabpanel" aria-labelledby="forge-tab-${state.tab}"` : ""}>
-      ${state.history ? historyView() : state.run ? `${state.run.error ? `<div class="run-error"><strong>The run stopped here.</strong><p>${esc(state.run.error)}</p></div>` : ""}${state.run.diagnostics ? `<section class="section"><div class="section-label">GROQ DIAGNOSTIC SUGGESTIONS</div><p>${esc(state.run.diagnostics.summary)}</p><ul class="acceptance">${state.run.diagnostics.suggestions.map(s=>`<li>${esc(s)}</li>`).join("")}</ul><p class="limitation">Suggestions only. No commands or dependency changes were executed.</p></section>` : ""}${state.run.limitations?.map(l => `<p class="limitation">${esc(l)}</p>`).join("") || ""}${state.tab === "progress" ? progress() : state.tab === "changes" ? changes() : state.tab === "timeline" ? timeline() : checks()}` : landing()}</div>
-      ${state.history ? `<footer class="approval-footer">${button("back", "Back", "secondary wide", "back")}</footer>` : approvalFooter()}
+      ${state.history ? historyView() : state.run ? `${state.run.error ? `<div class="run-error"><strong>The run stopped here.</strong><p>${esc(state.run.error)}</p></div>` : ""}${state.run.diagnostics ? `<section class="section"><div class="section-label">GROQ DIAGNOSTIC SUGGESTIONS</div><p>${esc(state.run.diagnostics.summary)}</p><ul class="acceptance">${state.run.diagnostics.suggestions.map(s=>`<li>${esc(s)}</li>`).join("")}</ul><p class="limitation">Suggestions only. No commands or dependency changes were executed.</p></section>` : ""}${state.run.limitations?.map(l => `<p class="limitation">${esc(l)}</p>`).join("") || ""}${state.tab === "chat" ? chatView() : state.tab === "progress" ? progress() : state.tab === "changes" ? changes() : state.tab === "timeline" ? timeline() : checks()}` : landing()}</div>
+      ${state.run && !state.history ? chatComposer() : ""}
+      ${state.history ? `<footer class="approval-footer">${button("back", "Back", "secondary wide", "back")}</footer>` : state.tab === "chat" ? "" : approvalFooter()}
       ${state.revision ? `<div class="feedback-overlay"><section class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="forge-feedback-title" aria-describedby="forge-feedback-help"><h2 id="forge-feedback-title">Shape the next proposal</h2><p id="forge-feedback-help">Describe a correction, an addition, or a missing requirement. Forge will create a new proposal on the current upstream base with fresh checks. Pending approval is retired; published commits and PRs are preserved. This does not edit an existing PR. You’ll review it before any commit.</p><label class="revision-label" for="forge-feedback">Your request</label><textarea id="forge-feedback" rows="6" minlength="10" maxlength="4000" placeholder="For example: also reject boolean values and add a regression test.">${esc(state.feedback)}</textarea>${state.error ? `<p role="alert">${esc(state.error)}</p>` : ""}<div class="feedback-actions">${button("cancel-feedback", "Cancel", "secondary")}${button("submit-revision", "Create revised proposal", "primary", "arrow")}</div></section></div>` : ""}</aside>`;
     theme();
     const body = root.querySelector(".panel-body"); if (body) body.scrollTop = scrollTop;
     if (focusAction) root.querySelector(`[data-action="${focusAction}"]`)?.focus({preventScroll: true});
-    if (feedbackFocused) {const input = root.querySelector("#forge-feedback"); input?.focus(); input?.setSelectionRange(...selection);}
+    if (feedbackFocused) {const input = root.querySelector("#" + focusedInput); input?.focus({preventScroll:true}); input?.setSelectionRange(...selection);}
     if (state.revision) for (const child of root.querySelector(".panel").children) child.inert = !child.classList.contains("feedback-overlay");
   }
 
   async function loadRun(id) {
     const changedRun = state.run?.id !== id;
-    state.run = await call("run", {id}); if (changedRun) state.pullHistory = state.run.pull_history || null;
+    state.run = await call("run", {id}); if(changedRun && state.run.conversation_only) state.tab="chat"; if (changedRun) state.pullHistory = state.run.pull_history || null;
     render();
     clearTimeout(timer);
-    if (state.open && activeStatuses.includes(state.run.status)) timer = setTimeout(() => loadRun(id).catch(error => {state.error = error.message; render();}), 1400);
+    if (state.open && (activeStatuses.includes(state.run.status) || (state.run.chat || []).some(t => t.status === "pending" && Date.now()/1000-t.created < 900))) timer = setTimeout(() => loadRun(id).catch(error => {state.error = error.message; render();}), 1400);
   }
   async function open() {
     state.open = true; render(); root.querySelector('[data-action="close"]')?.focus();
@@ -233,12 +247,38 @@
     if (action === "options") return call("options");
     if (action === "dismiss") {state.error = ""; return;}
     if (action === "demo" || action === "start") return start(action === "demo" ? "demo" : "github");
+    if (action === "open-chat") {
+      const ctx = context();
+      const run = await call("conversation", {body:{repo:ctx.repo, issue:ctx.issue || 0, mode:"github", request_key:crypto.randomUUID()}});
+      state.run = run; state.tab="chat"; state.history=null;
+      await call("active", {id:run.id}); return loadRun(run.id);
+    }
     if (action === "start-task") return start("task");
     if (action === "analyze-repo") {state.analysis = await call("analyze-repo", {body:{repo:context().repo,enable:true}}); return;}
     if (action === "history-all" || action === "history-published") {state.historyFilter = action === "history-all" ? "all" : "published"; return;}
     if (action === "history") {const data = await call("list"); state.history = data.runs; state.historyCursor = data.next_cursor; return;}
     if (action === "history-more") {const data = await call("list", {before:state.historyCursor}); state.history.push(...data.runs); state.historyCursor = data.next_cursor; return;}
     if (action === "sync-pr") {state.pullHistory = await call("pull-history", {id: state.run.id}); return;}
+    if (action === "send-chat") {
+      const id = state.run.id, message = (state.chatDrafts[id] || "").trim();
+      if (!message) throw new Error("Type a message for Forge.");
+      state.tab = "chat";
+      const run = await call("chat", {id, body:{message, request_key:crypto.randomUUID()}});
+      state.chatDrafts[id] = ""; state.run = run;
+      await loadRun(id);
+      const body = root.querySelector(".panel-body"); if(body) body.scrollTop = body.scrollHeight;
+      return;
+    }
+    if (action === "build-chat") {
+      const messages = [...(state.run.chat || []).map(t=>t.message), state.chatDrafts[state.run.id] || ""].filter(Boolean);
+      if (!messages.length) throw new Error("Describe the changes in Message Forge first.");
+      const feedback = messages.join("\n\n");
+      if(feedback.length > 4000) throw new Error("Summarize your conversation in Request follow-up changes (maximum 4000 characters).");
+      if(state.run.conversation_only) await call("analyze-repo", {body:{repo:state.run.repo,enable:true}});
+      const next = await call("revision", {id:state.run.id, body:{feedback, request_key:crypto.randomUUID()}});
+      state.confirm = false; state.tab = "progress";
+      await call("active", {id:next.id}); return loadRun(next.id);
+    }
     if (action === "diagnose") {await call("diagnose", {id:state.run.id}); return loadRun(state.run.id);}
     if (action === "back") {state.history = null; return;}
     if (action === "new") {state.run = null; state.history = null; state.confirm = false; await call("active", {id: null}); return;}
@@ -282,12 +322,18 @@
       try {await loadRun(el.dataset.run);} catch(error) {state.error = error.message; render();} return;
     }
     const action = el.dataset.action; if (!action) return;
-    state.error = ""; state.busy = true;
+    state.error = ""; state.busy = true; render();
     try {await act(action);} catch(error) {state.error = error.message;}
     finally {state.busy = false; render(); if (action === "revision") root.querySelector("#forge-feedback")?.focus(); if (action === "cancel-feedback") root.querySelector('[data-action="revision"]')?.focus();}
   });
-  root.addEventListener("input", event => {if (event.target.id === "forge-feedback") state.feedback = event.target.value; if(event.target.id === "forge-task") state.task = event.target.value;});
+  root.addEventListener("input", event => {if(event.target.id === "forge-chat") state.chatDrafts[state.run.id] = event.target.value; if (event.target.id === "forge-feedback") state.feedback = event.target.value; if(event.target.id === "forge-task") state.task = event.target.value;});
   root.addEventListener("keydown", event => {
+    if(event.target.id === "forge-chat" && event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      if(!event.isTrusted || state.busy || root.querySelector('[data-action="send-chat"]')?.disabled) return;
+      state.busy=true; render();
+      act("send-chat").catch(error=>{state.error=error.message;}).finally(()=>{state.busy=false;render();}); return;
+    }
     if (state.revision) {
       if (event.key === "Escape") {event.preventDefault(); state.revision = false; render(); root.querySelector('[data-action="revision"]')?.focus();}
       if (event.key === "Tab") {
@@ -300,7 +346,7 @@
     }
     if (event.key === "Escape") {state.open = false; clearTimeout(timer); render(); root.querySelector(".launcher")?.focus();}
     if (event.target.dataset?.tab && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
-      event.preventDefault(); const tabs = ["progress", "changes", "checks", "timeline"];
+      event.preventDefault(); const tabs = ["chat", "progress", "changes", "checks", "timeline"];
       state.tab = tabs[(tabs.indexOf(state.tab) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
       render(); root.querySelector(`[data-tab="${state.tab}"]`)?.focus();
     }

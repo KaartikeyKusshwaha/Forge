@@ -34,6 +34,9 @@ function allowedRequest(message) {
       if (/^[\w.-]+\/[\w.-]+$/.test(message.body?.repo || ""))
         return ["POST", "/api/repository/analyze", {repo: message.body.repo, enable: message.body.enable === true}];
       break;
+    case "conversation":
+      if (/^[\w.-]+\/[\w.-]+$/.test(message.body?.repo || "")) return ["POST", "/api/conversations", message.body];
+      break;
     case "create": {
       const data = message.body;
       if (!data || !/^[\w.-]+\/[\w.-]+$/.test(data.repo) || !Number.isInteger(data.issue) ||
@@ -42,6 +45,10 @@ function allowedRequest(message) {
     }
     case "run": if (runPath) return ["GET", runPath]; break;
     case "pull-history": if (runPath) return ["GET", runPath + "/pull-history"]; break;
+    case "chat":
+      if (runPath && typeof message.body?.message === "string" && typeof message.body?.request_key === "string")
+        return ["POST", runPath + "/chat", {message:message.body.message, request_key:message.body.request_key}];
+      break;
     case "diagnose": if (runPath) return ["POST", runPath + "/diagnose"]; break;
     case "patch": if (runPath) return ["GET", runPath + "/patch", null, true]; break;
     case "cancel": case "reject": if (runPath) return ["POST", runPath + "/" + message.action]; break;

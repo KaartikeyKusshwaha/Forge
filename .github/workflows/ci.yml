@@ -35,6 +35,7 @@ jobs:
       - run: pnpm test:background
       - run: pnpm exec playwright install --with-deps chromium
       - run: node tests/feedback.e2e.cjs
+      - run: node tests/chat.e2e.cjs
       - run: node tests/integration-setup.e2e.cjs
       - name: Start local fixture service
         run: |

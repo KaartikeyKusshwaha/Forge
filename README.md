@@ -186,3 +186,19 @@ This is explicit owner mode, not multi-user App authorization or a silent fallba
 Checks use `.github/workflows/forge-check.yml` on the configured public runner
 repository. Compressed source must fit GitHub's dispatch payload (58 KB encoded);
 oversized repositories receive a clear refusal rather than host execution.
+
+## Talk to Forge
+
+Choose **Talk to Forge** on a GitHub repository or issue to start a conversation
+without running code. Every run also has a persistent **Message Forge** composer
+and **Chat** tab. Ask questions, refine requirements or discuss check failures.
+Ctrl/Cmd+Enter sends a message. Replies use the connected model and its configured
+spending policy; chat does not bypass provider authentication or billing controls.
+
+Conversations are stored with the run in the local SQLite database and remain
+available through History. Chat has the supplied run evidence, not unrestricted
+repository or command access. **Build from conversation** turns your written
+instructions into a new sandbox-checked proposal. On a new repository it enables
+public source analysis first. Approval of the exact candidate is still required
+before any target commit or PR. Published PRs remain preserved; follow-ups create
+new proposals using the existing revision flow.

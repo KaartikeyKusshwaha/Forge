@@ -99,7 +99,7 @@ class Store:
         with Session(self.engine) as s:
             return s.scalar(select(Run.id).where(Run.status.not_in(TERMINAL)).limit(1)) is not None
 
-    def create(self, repo: str, issue: int, data: dict, key: str) -> dict:
+    def create(self, repo: str, issue: int, data: dict, key: str, *, status="queued") -> dict:
         # Model switches use the same durable run inventory, including older queued jobs.
         # Idempotency key belongs to this single-owner installation.
         run_id = uuid.uuid5(uuid.NAMESPACE_URL, "forge:" + key).hex
@@ -115,15 +115,17 @@ class Store:
                     raise Conflict("This request key was already used for a different run.")
                 return self.serialize(existing)
             now = time.time()
-            row = Run(id=run_id, repo=repo, issue=issue, status="queued", created=now, updated=now, data=data)
+            row = Run(id=run_id, repo=repo, issue=issue, status=status, created=now, updated=now, data=data)
             s.add(row)
             s.flush()
             s.add(
                 Event(
                     run_id=run_id,
                     created=now,
-                    kind="queued",
-                    message="Run queued. No repository writes authorized.",
+                    kind=status,
+                    message="Conversation opened. No execution started."
+                    if status == "needs_input"
+                    else "Run queued. No repository writes authorized.",
                 )
             )
             return self.serialize(row)
