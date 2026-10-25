@@ -111,6 +111,7 @@ class Store:
                     or existing.issue != issue
                     or existing.data["mode"] != data["mode"]
                     or existing.data.get("request", "") != data.get("request", "")
+                    or bool(existing.data.get("conversation_only")) != bool(data.get("conversation_only"))
                 ):
                     raise Conflict("This request key was already used for a different run.")
                 return self.serialize(existing)
@@ -282,10 +283,14 @@ class Store:
                 updated=now,
                 data={
                     "mode": "github",
-                    "title": previous.data["title"],
+                    "title": feedback.splitlines()[0][:200]
+                    if previous.data.get("conversation_only")
+                    else previous.data["title"],
                     "parent_run": run_id,
                     "feedback": feedback,
-                    "request": previous.data.get("request", ""),
+                    "request": feedback
+                    if previous.data.get("conversation_only")
+                    else previous.data.get("request", ""),
                     "previous_request": previous.data.get("feedback", ""),
                     "previous_publication": previous.data.get("publication"),
                     "requested_profile": previous.data.get("requested_profile", "auto"),

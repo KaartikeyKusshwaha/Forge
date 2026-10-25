@@ -10,7 +10,7 @@ from forge.store import Conflict
 def conversation(client):
     response = client.post(
         "/api/conversations",
-        json={"repo": "owner/repo", "issue": 1, "request_key": "chat-session-fixture"},
+        json={"repo": "owner/repo", "issue": 0, "request_key": "chat-session-fixture"},
     )
     assert response.status_code == 201
     return response.json()
@@ -56,6 +56,7 @@ def test_chat_context_persistence_idempotency_and_approval_unchanged(setup, monk
         json={"feedback": body["message"], "request_key": "chat-build-fixture"},
     ).json()
     assert revision["status"] == "queued" and revision["parent_run"] == run["id"]
+    assert revision["request"] == body["message"]
     assert "candidate" not in revision
 
 
@@ -86,3 +87,16 @@ def test_chat_requires_owner_auth_and_rejects_blank_messages(setup):
     assert client.post(path, json=body).status_code == 422
     client.headers.pop("Authorization")
     assert client.post(path, json=body).status_code == 401
+
+
+def test_demo_chat_cannot_make_model_calls(setup):
+    from conftest import create_demo
+
+    config, store, client = setup
+    run = create_demo(client)
+    response = client.post(
+        f"/api/runs/{run['id']}/chat",
+        json={"message": "Please run a model", "request_key": "chat-demo-fixture"},
+    )
+    assert response.status_code == 409
+    assert not store.get(run["id"]).get("chat")

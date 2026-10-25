@@ -270,7 +270,10 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     def chat_run(run_id: str, body: ChatMessage):
         from forge.chat import prepare, reply
 
-        get_run(run_id)
+        if get_run(run_id)["mode"] == "demo":
+            raise HTTPException(
+                409, "Open Talk to Forge on a repository for live chat. The demo makes no model calls."
+            )
         message = body.message.strip()
         if not message:
             raise HTTPException(422, "Type a message for Forge.")
