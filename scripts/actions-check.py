@@ -57,8 +57,8 @@ with tempfile.TemporaryDirectory(prefix="forge-isolated-", dir="/tmp") as direct
         if parent.is_dir():
             parent.chmod(0o777)
     def isolated(command, stage, writable, limit="16M", offline=True):
-        scratch = Path(writable[0]) / (".forge-tmp-" + stage)
-        scratch.mkdir(exist_ok=True)
+        scratch = Path(tempfile.mkdtemp(prefix="forge-scratch-", dir="/tmp"))
+        writable = [*writable, scratch]
         scratch.chmod(0o777)
         service = ["sudo", "systemd-run", "--quiet", "--wait", "--pipe", "--collect",
             "--unit=forge-" + request_id + "-" + stage,
@@ -121,6 +121,24 @@ with tempfile.TemporaryDirectory(prefix="forge-isolated-", dir="/tmp") as direct
         except (ValueError, subprocess.SubprocessError) as exc:
             setup["status"] = "failed"
             setup["output"] += "\n" + str(exc)
+    if profile == "typescript" and "package.json" in files:
+        try:
+            manifest = json.loads(files["package.json"])
+            if manifest.get("dependencies") or manifest.get("devDependencies"):
+                if "package-lock.json" not in files:
+                    raise ValueError("Node dependency setup requires package-lock.json. Generate and commit a lockfile before running Forge.")
+                # No lifecycle hooks run during networked dependency retrieval.
+                # npm test and build hooks execute only in the offline test stage.
+                code, output = isolated([shutil.which("npm"), "ci", "--ignore-scripts", "--no-audit",
+                    "--no-fund", "--cache", str(work / ".npm-cache"), "--userconfig=/dev/null"],
+                    "node-dependencies", [work], "128M", offline=False)
+                setup["output"] = output
+                if code:
+                    raise ValueError("Locked Node dependency installation failed.")
+                setup["status"] = "ready"
+        except (ValueError, subprocess.SubprocessError) as exc:
+            setup["status"] = "failed"
+            setup["output"] += "\n" + str(exc)
     # A root-owned, read-only systemd service enforces the execution boundary.
     # The target never receives Actions credentials, model keys, or source-control credentials.
     if profile == "python":
@@ -128,7 +146,9 @@ with tempfile.TemporaryDirectory(prefix="forge-isolated-", dir="/tmp") as direct
     else:
         tests = sorted(str(p.relative_to(work)) for p in work.rglob("*") if p.name.endswith((".test.ts", ".test.js")))
         command = [shutil.which("node"), "--experimental-strip-types", "--test", *tests]
-        if not tests:
+        if "package.json" in files and json.loads(files["package.json"]).get("scripts", {}).get("test"):
+            command = [shutil.which("npm"), "test"]
+        elif not tests:
             command = [shutil.which("node"), "-e", "console.error('No supported tests');process.exit(1)"]
     if setup["status"] == "failed":
         code, output = 2, "Sandbox dependency setup failed.\n" + setup["output"]

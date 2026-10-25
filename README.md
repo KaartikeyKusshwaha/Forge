@@ -116,8 +116,14 @@ uv run forge doctor
 
 Restart, open an issue in a selected public repository, and choose **Start Forge**.
 The configured free provider receives the issue and relevant public source. The
-isolated runners support pytest and Node's built-in runner. Automatic target
-dependency installation is not enabled. The runner repository must be public for
+isolated runners install static Python dependencies from PyPI wheels, install the
+project offline in its own virtual environment, and run pytest. Locked npm projects
+use `npm ci --ignore-scripts` before offline `npm test`; Node's built-in runner
+works without a package manifest. Setup output and wheel hashes appear in Checks.
+Dependency retrieval has network access under an unprivileged identity without
+credentials; project build hooks and tests run offline with filesystem, time,
+memory and process limits. Direct Python URL/VCS dependencies, dynamic dependencies
+and packages without compatible wheels require a reviewed setup profile. The runner repository must be public for
 this free execution route; source snapshots and check logs are therefore public.
 
 Publishing defaults to off. Review target CI before enabling
