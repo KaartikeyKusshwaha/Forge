@@ -176,6 +176,16 @@ with disposable_source() as directory:
     else:
         matches = re.findall(r"# tests (\d+)", output)
         count = int(matches[-1]) if matches else 0
+        if not matches:
+            # Common npm test runners expose summaries rather than TAP.
+            summaries = re.findall(r"Tests?:[^\n]*?(\d+) total", output)
+            if summaries:
+                count = int(summaries[-1])
+                skipped = re.findall(r"Tests?:[^\n]*?(\d+) skipped", output)
+                count -= int(skipped[-1]) if skipped else 0
+            else:
+                totals = re.findall(r"(\d+) (?:passing|failing|passed|failed)", output)
+                count = sum(map(int, totals))
     result = {"request_id": request_id, "snapshot_digest": digest, "command": " ".join(command),
               "exit_code": code, "count": count, "output": output, "setup": setup}
     shutil.rmtree(environment, ignore_errors=True)

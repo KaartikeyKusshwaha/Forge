@@ -1,0 +1,15 @@
+{
+  "repository": "ahujasid/mcp-for-blender",
+  "commit": "febcd90ece59c3416d7c55fd3723cea46bcaa59d",
+  "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40217842715",
+  "setup_status": "ready",
+  "downloaded_wheels": 35,
+  "tests": {
+    "passed": 504,
+    "failed": 1,
+    "skipped": 56
+  },
+  "remaining_failure": "tests/test_compat_matrix.py::test_addon_status_always_answers[current]: No module named 'blender_mcp.config'",
+  "target_repository_modified": false,
+  "isolation_ci": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40217777012"
+}
