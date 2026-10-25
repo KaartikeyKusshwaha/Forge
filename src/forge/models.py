@@ -273,10 +273,6 @@ class ModelVault:
 
     def save(self, key, label, provider, mode, budget, groq_confirmed, endpoint=""):
         if provider == "local":
-            if mode != "free_only":
-                raise PolicyError(
-                    "Local endpoints use the free-only policy. Remote billing cannot be inferred from a local proxy."
-                )
             provider, models = discover_local(endpoint)
         else:
             provider, models = discover(key, provider, mode, groq_confirmed)

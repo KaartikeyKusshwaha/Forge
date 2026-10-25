@@ -184,3 +184,10 @@ def test_unindexed_planner_paths_are_corrected_before_worker_execution(monkeypat
     )
     assert provider().ask("planner", "Plan", {"available_paths": ["pagination.py"]}) == PLAN
     assert len(requests) == 2
+
+
+def test_unlimited_permission_does_not_apply_a_forge_token_or_call_cap(monkeypatch):
+    requests = transport(monkeypatch, [completion(json.dumps(PLAN))])
+    p = provider(model_usage_mode="unlimited", max_calls=0, max_tokens=0)
+    assert p.ask("planner", "Plan", {}) == PLAN
+    assert len(requests) == 1

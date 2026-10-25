@@ -21,10 +21,10 @@ Collection errors do not count as executed tests.
 
 ## Node / TypeScript
 
-Projects with dependencies need a committed `package-lock.json`. Forge runs
+For npm projects without a lockfile, Forge resolves one in the disposable workspace without changing the upstream repository. With a lockfile, Forge runs
 `npm ci --ignore-scripts --no-audit --no-fund` in the disposable VM, under the
 unprivileged identity. Install lifecycle hooks are disabled during retrieval.
-`npm test` runs offline afterward. Without a test script, the runner discovers
+`npm test` runs offline afterward. Detected pnpm/yarn projects use Corepack with their package-manager configuration. Node build scripts run offline. Playwright projects get a temporary headless Chromium download before offline tests. Without a test script, the runner discovers
 `.test.ts` / `.test.js` files for Node's built-in test runner. TAP and common
 Jest/Vitest/Mocha summaries supply test counts. A successful process with no
 recognized tests cannot pass the review gate.
@@ -60,3 +60,20 @@ CI executes real fixtures proving non-root identity, missing credentials, offlin
 tests/build hooks, protected filesystem, file-size limits, installed Python source
 packages, locked npm dependencies with install hooks disabled, and pinned public
 source reconstruction. No LLM is needed for dependency detection or installation.
+
+
+## Backend orchestration
+
+Run setup exposes a static environment plan (runtime, manifests, package manager,
+build, browser needs and unavailable toolchains). `GET /api/runs/{id}/environment`
+returns the plan and recorded setup evidence to the authenticated extension.
+The Checks panel shows environment details. Fixed CI/test flags are provided;
+no host environment or user secret is copied into repository execution.
+The CI fixtures include a real Chromium launch, disposable npm lock resolution,
+a build artifact and tests that read it, under the same execution boundary.
+
+The runner does not claim universal environment coverage. Python wheels and
+supported Node package managers work through these profiles. OS packages,
+databases, GPU drivers, Blender GUI and additional language runtimes still need
+reviewed runner profiles. Forge reports such needs; it does not install arbitrary
+repository-supplied system commands on the user's device.

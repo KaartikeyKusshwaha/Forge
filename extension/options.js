@@ -106,6 +106,7 @@ function profileView(data) {
     const select=document.createElement("select"); select.setAttribute("aria-label",`Model for ${profile.label}`);
     for(const model of profile.models) {const option=document.createElement("option");option.value=model.id;option.textContent=model.name + (model.free ? profile.compatible ? " · Account free allowance" : " · Free" : " · Paid");option.selected=model.id===profile.model;select.append(option);} box.append(select);
     const activate=document.createElement("button"); activate.type="button"; activate.textContent="Use this model";
+    if(profile.setup_only){activate.disabled=true;activate.textContent="Setup assistance only";}
     activate.addEventListener("click",async()=>{activate.disabled=true;try {profileView(await call("model-activate",{id:profile.id,model:select.value}));modelMessage.textContent="Model connected. New runs use this profile.";await inspect();}catch(error){modelMessage.textContent=error.message;}finally{activate.disabled=false;}}); box.append(activate);
     if(!profile.active){const remove=document.createElement("button");remove.type="button";remove.textContent="Remove profile";remove.addEventListener("click",async()=>{try{profileView(await call("model-delete",{id:profile.id}));}catch(error){modelMessage.textContent=error.message;}});box.append(remove);} list.append(box);
   }

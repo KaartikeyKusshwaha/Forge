@@ -108,7 +108,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     async def lifespan(app):
         yield
 
-    app = FastAPI(title="Forge", version="0.6.2", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Forge", version="0.7.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
     app.state.store = db
     vault = ModelVault(config)
@@ -170,7 +170,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
 
     @app.get("/health")
     def health():
-        return {"service": "forge", "version": "0.6.2", "status": "ok"}
+        return {"service": "forge", "version": "0.7.0", "status": "ok"}
 
     @app.get("/api/status", dependencies=[Depends(authenticated)])
     def status():
@@ -225,7 +225,10 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
         if not body.api_key.startswith("gsk_"):
             raise HTTPException(422, "Use your own Groq key for the optional setup assistant.")
         pid = vault.save(body.api_key, "Setup assistant", "groq-free", "free_only", 0, body.groq_confirmed)
+        record = vault.read(pid)
+        record["setup_only"] = True
         with vault.connect() as connection:
+            connection.execute("UPDATE profiles SET data=? WHERE id=?", (json.dumps(record), pid))
             connection.execute("INSERT OR REPLACE INTO settings VALUES('setup_helper',?)", (pid,))
         return {"configured": True, "required": False}
 
@@ -257,6 +260,10 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     def activate_model(profile_id: str, body: ModelActivation):
         if db.has_active_runs():
             raise Conflict("Wait for active runs to finish before switching profiles.")
+        if vault.read(profile_id).get("setup_only"):
+            raise Conflict(
+                "This credential is reserved for setup assistance. Connect a separate coding profile."
+            )
         vault.activate(profile_id, body.model)
         return vault.list()
 

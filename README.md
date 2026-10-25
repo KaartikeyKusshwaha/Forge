@@ -225,3 +225,19 @@ Protocol fixtures cover OpenAI-compatible, Anthropic-style and Responses-style
 messages. This is coverage of those protocol adapters, not a claim that every
 provider or operating-system configuration has been tested. Each installation
 still needs its own credentials, GitHub permissions and configured trusted runner.
+
+## Connection panel and sessions
+
+Connection settings open in the browser's native extension side panel where
+supported, with a settings-page fallback. Provider credentials are kept outside
+the GitHub page. Choose Free, Limited or Unlimited usage; edit saved profiles'
+permissions without replacing their keys. Ordinary setup needs no AI connection.
+Optional setup help can use the connected model or a separately saved Groq key.
+[Provider coverage and usage semantics](docs/PROVIDER_COVERAGE.md) distinguishes
+adapter support, inferred configuration and remaining provider-specific needs.
+
+**History** lists started conversations, engineering runs and Forge-created PRs.
+Open a record to review it. **End session** stops work, **Forget conversation**
+clears its chat context, and **Delete local record** removes the stopped local
+session and events. These actions do not delete GitHub branches, commits or PRs.
+Do not delete the local database if you want to retain history across updates.
