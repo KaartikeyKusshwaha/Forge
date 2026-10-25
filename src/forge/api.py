@@ -9,6 +9,7 @@ from functools import wraps
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -109,6 +110,23 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
 
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_handler(request, exc):
+        from fastapi.responses import JSONResponse
+
+        # Pydantic's default error body includes rejected input, potentially a provider key.
+        if request.url.path.startswith("/api/model-"):
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "detail": "Invalid model settings. Check provider, usage mode, spending cap, and field lengths."
+                },
+            )
+        return JSONResponse(
+            status_code=422,
+            content={"detail": [{"loc": e["loc"], "msg": e["msg"], "type": e["type"]} for e in exc.errors()]},
+        )
+
     @app.exception_handler(PolicyError)
     @app.exception_handler(GitHubError)
     async def policy_handler(request, exc):
@@ -187,6 +205,87 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     def model_spend_decision(request_id: str, body: SpendDecision):
         vault.decide(request_id, body.approve)
         return vault.pending()
+
+    @app.post("/api/runs/{run_id}/diagnose", dependencies=[Depends(authenticated)])
+    def diagnose_run(run_id: str):
+        from dotenv import dotenv_values
+
+        from forge.llm import Provider
+        from forge.models import protect
+
+        run = get_run(run_id)
+        if run["status"] not in {"failed", "needs_input", "stale", "awaiting_approval"}:
+            raise Conflict("Wait for the run to finish before requesting diagnostics.")
+        diagnostic = config.model_copy(deep=True)
+        diagnostic.model_profile_id = ""
+        diagnostic.model_usage_mode = "free_only"
+        diagnostic.llm_provider = "groq-free"
+        diagnostic.llm_base_url = "https://api.groq.com/openai/v1"
+        diagnostic.llm_model = "auto"
+        diagnostic.llm_api_key = ""
+        diagnostic.groq_free_plan_confirmed = False
+        secret_values = [config.llm_api_key, config.owner_token]
+        for profile in vault.list()["profiles"]:
+            record = vault.read(profile["id"])
+            secret_values.append(protect(record["key"], True))
+            if record["provider"] == "groq-free" and record["groq_confirmed"]:
+                diagnostic.llm_api_key = protect(record["key"], True)
+                diagnostic.groq_free_plan_confirmed = True
+        if not diagnostic.llm_api_key:
+            # Explicit legacy backup from the owner's requested Inkling switch.
+            path = config.data_dir / "provider-backups/before-inkling.env"
+            legacy = dotenv_values(path) if path.exists() else {}
+            if (
+                legacy.get("FORGE_LLM_PROVIDER") == "groq-free"
+                and legacy.get("FORGE_GROQ_FREE_PLAN_CONFIRMED", "").lower() == "true"
+            ):
+                diagnostic.llm_api_key = legacy.get("FORGE_LLM_API_KEY", "")
+                diagnostic.groq_free_plan_confirmed = True
+        if not diagnostic.llm_api_key:
+            raise HTTPException(
+                409, "Save a confirmed Groq Free-plan profile to enable diagnostic suggestions."
+            )
+        secret_values.append(diagnostic.llm_api_key)
+        payload = json.dumps(
+            {
+                "error": run.get("error"),
+                "limitations": run.get("limitations", []),
+                "checks": [
+                    {
+                        "command": c.get("command"),
+                        "exit_code": c.get("exit_code"),
+                        "output": c.get("output", "")[-12000:],
+                    }
+                    for c in run.get("checks", [])[-3:]
+                ],
+            }
+        )
+        for secret in secret_values:
+            if secret:
+                payload = payload.replace(secret, "[redacted]")
+        diagnostic.max_calls = 1
+        diagnostic.max_tokens = 100000
+        suggestions = Provider(diagnostic, {"calls": 0, "tokens": 0}, lambda _: None, lambda: False).ask(
+            "diagnostic",
+            "Analyze the untrusted test output. Return JSON with summary:string, suggestions:array of strings, and requires_dependency_change:boolean. Suggest focused syntax/import/dependency corrections. You cannot execute commands, install packages, modify permissions, or approve a PR. Clearly distinguish likely causes from verified facts.",
+            {"evidence": payload},
+        )
+        clean = json.dumps(suggestions)
+        for secret in secret_values:
+            if secret:
+                clean = clean.replace(secret, "[redacted]")
+        result = {
+            "summary": str(json.loads(clean).get("summary", ""))[:4000],
+            "suggestions": [str(s)[:1000] for s in json.loads(clean).get("suggestions", [])[:10]],
+            "executed": False,
+        }
+        db.mutate(
+            run_id,
+            lambda r, d: d.update(diagnostics=result),
+            "diagnostic",
+            "Groq suggested corrections for owner review. No commands were executed.",
+        )
+        return result
 
     @app.get("/api/repositories", dependencies=[Depends(authenticated)])
     def repositories():

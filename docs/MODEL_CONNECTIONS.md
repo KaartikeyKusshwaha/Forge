@@ -60,3 +60,13 @@ Legacy `.env` keys remain local; a saved active profile takes precedence on rest
 The API is an owner-operated local control plane, not a multi-user hosted credential
 service. Free research endpoints can log prompts; use public repository content and
 review provider terms. No claim of a production security audit is made.
+
+## Groq diagnostic helper
+
+On a failed run, **Analyze failure with Groq Free** sends a bounded, redacted subset
+of recorded errors and test output to a confirmed free-plan Groq profile. This
+installation can also use its private pre-Inkling Groq backup. Other provider keys
+and the Forge owner token are removed from that context. The helper returns likely
+syntax/import/dependency corrections and saves them with the run. It never installs
+packages or executes the returned text. Model suggestions are not verification.
+This helper is separate from the selected planner/coder/reviewer model.

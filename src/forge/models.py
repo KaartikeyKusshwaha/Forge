@@ -170,7 +170,9 @@ def discover(key, provider="auto", mode="free_only", groq_confirmed=False):
                 rates = {k: float(v) for k, v in prices.items()}
             except (ValueError, TypeError):
                 continue  # Unbounded/dynamic pricing cannot be authorized here.
-            if not rates or any(not math.isfinite(v) or v < 0 for v in rates.values()):
+            if not {"prompt", "completion"}.issubset(rates) or any(
+                not math.isfinite(v) or v < 0 for v in rates.values()
+            ):
                 continue
             free = all(v == 0 for v in rates.values())
             if provider == "openrouter-free" and free and not item["id"].endswith(":free"):
@@ -383,6 +385,10 @@ class ModelVault:
 
     def pending(self):
         with self.connect() as db:
+            db.execute(
+                "UPDATE spend SET status='expired',amount=0 WHERE status='pending' AND created<?",
+                (time.time() - 300,),
+            )
             return {
                 "requests": [
                     dict(zip(("id", "profile", "run_id", "role", "maximum_usd", "created"), row))

@@ -37,6 +37,7 @@ function allowedRequest(message) {
     }
     case "run": if (runPath) return ["GET", runPath]; break;
     case "pull-history": if (runPath) return ["GET", runPath + "/pull-history"]; break;
+    case "diagnose": if (runPath) return ["POST", runPath + "/diagnose"]; break;
     case "patch": if (runPath) return ["GET", runPath + "/patch", null, true]; break;
     case "cancel": case "reject": if (runPath) return ["POST", runPath + "/" + message.action]; break;
     case "approve":

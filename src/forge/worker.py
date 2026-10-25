@@ -127,7 +127,7 @@ class Worker:
         else:
             if not self.config.llm_ready:
                 raise PolicyError(
-                    "A free model API key and model selection are required. Paid endpoints are disabled."
+                    "Connect a verified model profile in Connection settings before starting a real run."
                 )
             if not ActionsSandbox.available():
                 raise PolicyError(
@@ -194,6 +194,10 @@ class Worker:
         baseline = check(files, "baseline")
         checks = [baseline]
         save(checks=checks)
+        if baseline.get("exit_code") == 2:
+            raise PolicyError(
+                "Baseline test collection failed. Review missing dependencies/import errors in Checks, then use Analyze failure with Groq Free for suggestions. No model-driven edits were attempted."
+            )
         if baseline["count"] == 0:
             raise PolicyError(
                 "Baseline collected no tests. Configure a supported test profile before asking Forge to edit."

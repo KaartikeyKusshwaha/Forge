@@ -131,6 +131,42 @@ def test_api_profiles_never_return_secrets_and_block_active_switch(monkeypatch, 
     assert client.get("/api/model-profiles").status_code == 401
 
 
+def test_invalid_profile_inputs_do_not_echo_secrets(setup):
+    _, _, client = setup
+    response = client.post("/api/model-profiles", json={"api_key": {"secret": KEY}})
+    assert response.status_code == 422
+    assert KEY not in response.text and '"input"' not in response.text
+
+
+def test_groq_diagnostic_suggests_without_executing_or_receiving_other_keys(monkeypatch, setup):
+    config, store, client = setup
+    backup = config.data_dir / "provider-backups/before-inkling.env"
+    backup.parent.mkdir()
+    backup.write_text(
+        "FORGE_LLM_PROVIDER=groq-free\nFORGE_GROQ_FREE_PLAN_CONFIRMED=true\nFORGE_LLM_API_KEY=gsk_fixture_secret_only\n"
+    )
+    config.llm_api_key = KEY
+    run = store.create(
+        "owner/repo",
+        1,
+        {"mode": "github", "title": "Failure", "error": "ImportError " + KEY, "checks": []},
+        "diagnostic-fixture-one",
+    )
+    store.mutate(run["id"], lambda r, d: {"status": "failed"})
+
+    def ask(self, role, instructions, context):
+        assert role == "diagnostic" and KEY not in json.dumps(context)
+        assert self.config.llm_provider == "groq-free"
+        assert self.config.model_usage_mode == "free_only"
+        return {"summary": "A dependency may be absent", "suggestions": ["Review the package requirements"]}
+
+    monkeypatch.setattr("forge.llm.Provider.ask", ask)
+    response = client.post(f"/api/runs/{run['id']}/diagnose")
+    assert response.status_code == 200, response.text
+    assert response.json()["executed"] is False
+    assert store.get(run["id"])["status"] == "failed"
+
+
 def test_discovery_checks_access_and_defaults_to_inkling_without_inference(monkeypatch):
     import httpx
 
