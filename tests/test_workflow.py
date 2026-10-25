@@ -158,3 +158,30 @@ def test_single_active_run_across_distinct_jobs(setup):
     create_demo(client, "second-separate-request")
     assert store.claim("first-worker") is not None
     assert store.claim("second-worker") is None
+
+
+def test_follow_up_preserves_published_history_and_requires_fresh_approval(setup):
+    _, store, client = setup
+    old = store.create(
+        "owner/repo",
+        0,
+        {
+            "mode": "github",
+            "title": "Custom task",
+            "request": "Improve the boundary validation.",
+            "publication": {"pr_url": "https://github.com/owner/repo/pull/7", "commit_sha": "a" * 40},
+        },
+        "published-request-001",
+    )
+    store.mutate(old["id"], lambda r, d: {"status": "pr_opened"})
+    body = {
+        "feedback": "Also add regression coverage for invalid strings.",
+        "request_key": "follow-up-request-001",
+    }
+    response = client.post(f"/api/runs/{old['id']}/revision", json=body)
+    assert response.status_code == 201, response.text
+    new = response.json()
+    assert store.get(old["id"])["status"] == "pr_opened"
+    assert new["previous_publication"]["commit_sha"] == "a" * 40
+    assert new["request"] == old["request"]
+    assert "publication" not in new and "approval" not in new and "candidate" not in new

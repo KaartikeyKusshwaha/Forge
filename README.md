@@ -8,7 +8,12 @@ Owner: start with [your final check](docs/OWNER_TEST.md). The prepared real
 Python and TypeScript proposals are waiting for your review.
 
 Manifest V3 extension + Python/FastAPI API + durable Python worker. Light/dark
-themes, keyboard navigation, mobile review, Progress / Changes / Checks views.
+themes, keyboard navigation, mobile review, Progress / Changes / Checks / Timeline views.
+
+Version 0.3 adds public repository onboarding from GitHub's Code page, custom
+contribution requests, owner-fork publication, and a history panel for requests,
+commits and PRs. Reopen finished requests to propose follow-up changes with fresh
+approval. See [the contribution workflow and current execution limits](docs/CONTRIBUTING_FLOW.md).
 
 **Status: local pilot implementation.** The bundled sample works with real Python
 regression checks, scripted agent steps, and no model calls or GitHub writes.

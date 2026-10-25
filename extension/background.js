@@ -18,7 +18,11 @@ function allowedRequest(message) {
     case "status": return ["GET", "/api/status"];
     case "models": return ["GET", "/api/models"];
     case "github-setup": return ["POST", "/api/setup/github"];
-    case "list": return ["GET", "/api/runs"];
+    case "list": return ["GET", "/api/runs" + (Number.isFinite(message.before) ? "?before=" + encodeURIComponent(message.before) : "")];
+    case "analyze-repo":
+      if (/^[\w.-]+\/[\w.-]+$/.test(message.body?.repo || ""))
+        return ["POST", "/api/repository/analyze", {repo: message.body.repo, enable: message.body.enable === true}];
+      break;
     case "create": {
       const data = message.body;
       if (!data || !/^[\w.-]+\/[\w.-]+$/.test(data.repo) || !Number.isInteger(data.issue) ||

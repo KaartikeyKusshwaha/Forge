@@ -101,7 +101,12 @@ class Store:
         with Session(self.engine) as s, s.begin():
             existing = s.get(Run, run_id)
             if existing:
-                if existing.repo != repo or existing.issue != issue or existing.data["mode"] != data["mode"]:
+                if (
+                    existing.repo != repo
+                    or existing.issue != issue
+                    or existing.data["mode"] != data["mode"]
+                    or existing.data.get("request", "") != data.get("request", "")
+                ):
                     raise Conflict("This request key was already used for a different run.")
                 return self.serialize(existing)
             now = time.time()
@@ -125,11 +130,13 @@ class Store:
                 raise KeyError(run_id)
             return self.serialize(row)
 
-    def list(self, repo: str | None = None) -> list[dict]:
+    def list(self, repo: str | None = None, before: float | None = None) -> list[dict]:
         with Session(self.engine) as s:
             q = select(Run).order_by(Run.created.desc()).limit(50)
             if repo:
                 q = q.where(Run.repo == repo)
+            if before is not None:
+                q = q.where(Run.created < before)
             return [self.serialize(r) for r in s.scalars(q)]
 
     def mutate(self, run_id: str, fn: Callable, kind: str = "", message: str = "", owner: str = "") -> dict:
@@ -232,8 +239,16 @@ class Store:
                 if existing.data.get("parent_run") != run_id or existing.data.get("feedback") != feedback:
                     raise Conflict("Request key belongs to another revision.")
                 return self.serialize(existing)
-            if previous.status != "awaiting_approval":
-                raise Conflict("Only a proposal awaiting approval can be revised.")
+            if previous.status not in {
+                "awaiting_approval",
+                "pr_opened",
+                "rejected",
+                "failed",
+                "cancelled",
+                "stale",
+                "needs_input",
+            }:
+                raise Conflict("Wait for this run to finish before requesting changes.")
             if previous.data["mode"] == "demo":
                 raise Conflict("The bundled demo has a fixed proposal. Revisions require a real model run.")
             old_data = copy.deepcopy(previous.data)
@@ -241,7 +256,12 @@ class Store:
             changed = s.execute(
                 update(Run)
                 .where(Run.id == run_id, Run.version == previous.version)
-                .values(status="rejected", data=old_data, updated=time.time(), version=previous.version + 1)
+                .values(
+                    status="rejected" if previous.status == "awaiting_approval" else previous.status,
+                    data=old_data,
+                    updated=time.time(),
+                    version=previous.version + 1,
+                )
             )
             if not changed.rowcount:
                 raise Conflict("Proposal changed during revision. Refresh before continuing.")
@@ -258,6 +278,10 @@ class Store:
                     "title": previous.data["title"],
                     "parent_run": run_id,
                     "feedback": feedback,
+                    "request": previous.data.get("request", ""),
+                    "previous_request": previous.data.get("feedback", ""),
+                    "previous_publication": previous.data.get("publication"),
+                    "requested_profile": previous.data.get("requested_profile", "auto"),
                     "usage": {"calls": 0, "tokens": 0, "cost": 0},
                     "checks": [],
                     "repairs": 0,
@@ -270,7 +294,7 @@ class Store:
                     run_id=run_id,
                     created=now,
                     kind="revision_requested",
-                    message="Owner requested a revision; this candidate can no longer be approved.",
+                    message="Owner requested a follow-up proposal. Published history is preserved; any pending candidate is retired.",
                 )
             )
             s.add(

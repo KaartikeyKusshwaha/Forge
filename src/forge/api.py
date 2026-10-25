@@ -22,7 +22,8 @@ from forge.store import Conflict, Store
 
 class NewRun(BaseModel):
     repo: str = Field(max_length=200, pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-    issue: int = Field(ge=1, le=2**31)
+    issue: int = Field(ge=0, le=2**31)
+    request: str = Field(default="", max_length=4000)
     mode: Literal["github", "demo"] = "github"
     profile: Literal["auto", "python", "typescript"] = "auto"
     request_key: str = Field(min_length=12, max_length=100)
@@ -38,6 +39,11 @@ class Revision(BaseModel):
     request_key: str = Field(min_length=12, max_length=100)
 
 
+class RepositoryRequest(BaseModel):
+    repo: str = Field(max_length=200)
+    enable: bool = False
+
+
 def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     config.data_dir.mkdir(parents=True, exist_ok=True)
     db = store or Store(config.database_url)
@@ -46,7 +52,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     async def lifespan(app):
         yield
 
-    app = FastAPI(title="Forge", version="0.2.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Forge", version="0.3.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
     app.state.store = db
 
@@ -78,7 +84,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
 
     @app.get("/health")
     def health():
-        return {"service": "forge", "version": "0.2.0", "status": "ok"}
+        return {"service": "forge", "version": "0.3.0", "status": "ok"}
 
     @app.get("/api/status", dependencies=[Depends(authenticated)])
     def status():
@@ -102,14 +108,22 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     def repositories():
         return {"repositories": GitHub(config).repositories()}
 
+    @app.post("/api/repository/analyze", dependencies=[Depends(authenticated)])
+    def analyze_repository(body: RepositoryRequest):
+        return GitHub(config).analyze_repository(body.repo, body.enable)
+
     @app.get("/api/runs", dependencies=[Depends(authenticated)])
-    def runs(repo: str | None = None):
+    def runs(repo: str | None = None, before: float | None = None):
         result = []
-        for r in db.list(repo):
+        for r in db.list(repo, before):
             result.append(
-                {k: v for k, v in r.items() if k not in {"candidate", "context", "checks", "index"}}
+                {
+                    k: v
+                    for k, v in r.items()
+                    if k not in {"candidate", "context", "checks", "index", "pull_history"}
+                }
             )
-        return {"runs": result}
+        return {"runs": result, "next_cursor": result[-1]["created"] if len(result) == 50 else None}
 
     @app.get("/api/runs/{run_id}/pull-history", dependencies=[Depends(authenticated)])
     def pull_history(run_id: str):
@@ -120,14 +134,22 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
         match = re.fullmatch(r"https://github\.com/" + re.escape(run["repo"]) + r"/pull/(\d+)", url)
         if not match:
             raise HTTPException(409, "This run has no published pull request.")
-        return GitHub(config).pull_history(run["repo"], int(match[1]))
+        result = GitHub(config).pull_history(run["repo"], int(match[1]))
+        db.mutate(run_id, lambda r, d: d.update(pull_history=result, pr_state=result["state"]))
+        return result
 
     @app.post("/api/runs", status_code=201, dependencies=[Depends(authenticated)])
     def new_run(body: NewRun):
+        if body.issue == 0 and (body.mode != "github" or len(body.request.strip()) < 10):
+            raise HTTPException(422, "Describe the repository task in at least 10 characters.")
         if body.mode == "demo" and not config.demo_enabled:
             raise HTTPException(403, "Demo mode is disabled.")
         if body.mode == "github":
             GitHub.validate_repo(body.repo)
+            if config.github_auth == "cli" and body.repo.lower() not in {
+                r.lower() for r in GitHub(config).selected_repositories()
+            }:
+                raise HTTPException(409, "Choose Enable and analyze repository before starting this task.")
             if not config.github_ready or not config.llm_ready:
                 raise HTTPException(
                     409,
@@ -144,8 +166,13 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
             issue,
             dict(
                 mode=body.mode,
+                request=body.request.strip(),
                 requested_profile=body.profile,
-                title="Reject a page size of zero" if body.mode == "demo" else f"Issue #{body.issue}",
+                title="Reject a page size of zero"
+                if body.mode == "demo"
+                else body.request.strip().splitlines()[0][:200]
+                if body.issue == 0
+                else f"Issue #{body.issue}",
                 usage={"calls": 0, "tokens": 0, "cost": 0},
                 checks=[],
                 repairs=0,

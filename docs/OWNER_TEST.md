@@ -1,5 +1,8 @@
 # Your final check
 
+For public repository onboarding, fork contributions, commit history and follow-up
+requests, see [the contribution workflow](CONTRIBUTING_FLOW.md).
+
 Forge is inside GitHub. There is no separate website to visit.
 The local service is configured with your confirmed Groq Free-plan key and Qwen
 3.8 27B. Docker is not used. Only the owned dummy acceptance repository is

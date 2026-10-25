@@ -130,12 +130,28 @@ class Worker:
                 raise PolicyError(
                     "GitHub Actions runner is unavailable. No repository code will run on the host."
                 )
-            context = github.context(run["repo"], run["issue"])
+            context = (
+                github.context(run["repo"], run["issue"], run.get("request", ""))
+                if run.get("request")
+                else github.context(run["repo"], run["issue"])
+            )
             files = github.snapshot(context)
             sandbox = ActionsSandbox(self.config)
             model = verify_free(self.config)["id"]
         if run.get("feedback"):
             context["owner_feedback"] = run["feedback"]
+        context["repository_guidelines"] = {
+            p: text[:12000]
+            for p, text in files.items()
+            if p.lower() in {"agents.md", "contributing.md", ".github/contributing.md"}
+        }
+        if run.get("previous_request"):
+            context["previous_owner_feedback"] = run["previous_request"]
+        if run.get("previous_publication"):
+            context["previous_publication"] = run["previous_publication"]
+            context["follow_up_policy"] = (
+                "This is a new proposal on the current upstream base. Do not assume an unmerged previous PR is present. Explain dependencies on prior changes to the owner."
+            )
         save(context=context, title=context["title"], model=model)
         profile = (
             "typescript"

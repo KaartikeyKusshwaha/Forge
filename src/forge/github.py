@@ -1,7 +1,9 @@
 """GitHub transport. No target code is ever imported or executed here."""
 
+import base64
 import hashlib
 import io
+import json
 import re
 import subprocess
 import tarfile
@@ -23,6 +25,79 @@ class GitHub:
     def __init__(self, config: Settings):
         self.config = config
 
+    def selected_repositories(self):
+        selected = {r.strip() for r in self.config.allowed_repositories.split(",") if r.strip()}
+        path = self.config.data_dir / "repositories.json"
+        if path.exists():
+            selected.update(json.loads(path.read_text(encoding="utf-8")))
+        return sorted(selected)
+
+    def analyze_repository(self, repo: str, enable: bool = False):
+        self.validate_repo(repo)
+        token = self.token()
+        metadata = self.request("GET", f"/repos/{repo}", token)
+        if metadata.get("private"):
+            raise GitHubError("Only public repositories are supported.")
+        if enable:
+            if self.config.github_auth != "cli":
+                raise GitHubError("Select repositories through your GitHub App installation settings.")
+            selected = self.selected_repositories()
+            if repo.lower() not in {r.lower() for r in selected}:
+                selected.append(repo)
+            self.config.data_dir.mkdir(parents=True, exist_ok=True)
+            path = self.config.data_dir / "repositories.json"
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(selected), encoding="utf-8")
+            temporary.replace(path)
+        branch = metadata["default_branch"]
+        commit = self.request("GET", f"/repos/{repo}/commits/{branch}", token)
+        sha = commit["sha"]
+        tree = self.request("GET", f"/repos/{repo}/git/trees/{sha}?recursive=1", token)
+        paths = [e["path"] for e in tree.get("tree", []) if e["type"] == "blob"]
+        guides = []
+        for path in paths:
+            if path.lower() in {
+                "contributing.md",
+                ".github/contributing.md",
+                "agents.md",
+                "pyproject.toml",
+                "package.json",
+            }:
+                entry = self.request("GET", f"/repos/{repo}/contents/{path}", token, params={"ref": sha})
+                if entry.get("encoding") == "base64" and entry.get("size", 0) < 50000:
+                    guides.append(
+                        {
+                            "path": path,
+                            "text": base64.b64decode(entry["content"]).decode("utf-8", errors="replace")[
+                                :12000
+                            ],
+                        }
+                    )
+        issues = self.request("GET", f"/repos/{repo}/issues", token, params={"state": "open", "per_page": 30})
+        limits = [
+            "Execution supports Python/Node test profiles without automatic dependency installation.",
+            "Runner payload is limited to 58 KB compressed; large snapshots stop without execution.",
+        ]
+        if "blender" in repo.lower():
+            limits.append(
+                "Blender-dependent checks require a Blender runtime and are not supported by the current runner."
+            )
+        if tree.get("truncated"):
+            limits.append("Repository tree is truncated; full analysis is unavailable.")
+        return {
+            "repo": repo,
+            "description": metadata.get("description"),
+            "base_sha": sha,
+            "enabled": repo.lower() in {r.lower() for r in self.selected_repositories()},
+            "file_count": len(paths),
+            "tests": [p for p in paths if "test" in p.lower()][:30],
+            "guides": guides,
+            "limitations": limits,
+            "issues": [
+                {"number": i["number"], "title": i["title"]} for i in issues if "pull_request" not in i
+            ],
+        }
+
     def app_request(self, method: str, path: str, **kwargs):
         if not self.config.github_app_id or not self.config.github_private_key_path:
             raise GitHubError("Configure a GitHub App first.")
@@ -34,7 +109,7 @@ class GitHub:
         return self.request(method, path, app_token, **kwargs)
 
     def token(self, repo_id: int | None = None, write: bool = False) -> str:
-        if not self.config.github_ready:
+        if not self.config.github_ready and self.config.github_auth != "cli":
             raise GitHubError("Configure a GitHub App and installation before starting a repository run.")
         if self.config.github_auth == "cli":
             result = subprocess.run(
@@ -88,7 +163,7 @@ class GitHub:
     def repositories(self) -> list[dict]:
         token = self.token()
         if self.config.github_auth == "cli":
-            selected = [r.strip() for r in self.config.allowed_repositories.split(",") if r.strip()]
+            selected = self.selected_repositories()
             result = []
             for repo in selected:
                 self.validate_repo(repo)
@@ -127,6 +202,7 @@ class GitHub:
         token = self.token(selected["id"])
         pull = self.request("GET", f"/repos/{repo}/pulls/{number}", token)
         events = self.request("GET", f"/repos/{repo}/issues/{number}/events?per_page=100", token)
+        commits = self.request("GET", f"/repos/{repo}/pulls/{number}/commits?per_page=100", token)
         milestones = [{"event": "opened", "created_at": pull["created_at"]}]
         milestones.extend(
             {"event": e["event"], "created_at": e["created_at"], "actor": (e.get("actor") or {}).get("login")}
@@ -144,12 +220,21 @@ class GitHub:
             "updated_at": pull["updated_at"],
             "events": sorted(unique.values(), key=lambda e: e["created_at"]),
             "limited": len(events) == 100,
+            "commits": [
+                {
+                    "sha": c["sha"],
+                    "message": c["commit"]["message"].splitlines()[0],
+                    "created_at": (c["commit"].get("committer") or {}).get("date"),
+                }
+                for c in commits
+            ],
+            "commits_limited": len(commits) == 100,
         }
 
-    def context(self, repo: str, issue: int) -> dict:
+    def context(self, repo: str, issue: int, request: str = "") -> dict:
         self.validate_repo(repo)
         if self.config.github_auth == "cli" and repo.lower() not in {
-            r.strip().lower() for r in self.config.allowed_repositories.split(",") if r.strip()
+            r.lower() for r in self.selected_repositories()
         }:
             raise GitHubError("Repository is outside the owner's explicit local allowlist.")
         token = self.token()
@@ -162,7 +247,15 @@ class GitHub:
         if metadata["id"] not in {r["id"] for r in self.repositories()}:
             raise GitHubError("Repository is outside this installation.")
         token = self.token(metadata["id"])
-        item = self.request("GET", f"/repos/{repo}/issues/{issue}", token)
+        item = (
+            self.request("GET", f"/repos/{repo}/issues/{issue}", token)
+            if issue
+            else {
+                "title": request.splitlines()[0][:200],
+                "body": request,
+                "html_url": f"https://github.com/{repo}",
+            }
+        )
         if "pull_request" in item:
             raise GitHubError("Start Forge from an issue, rather than a pull request.")
         branch = metadata["default_branch"]
@@ -174,6 +267,7 @@ class GitHub:
             raise GitHubError("Repository tree exceeds the supported pilot size.")
         return dict(
             repo_id=metadata["id"],
+            can_push=self.config.github_auth == "app" or metadata.get("permissions", {}).get("push", False),
             repo=repo,
             issue=issue,
             title=item["title"],
@@ -227,7 +321,7 @@ class GitHub:
             raise PolicyError("Approval expired. Review the candidate again.")
         ctx = run["context"]
         if self.config.github_auth == "cli" and run["repo"].lower() not in {
-            r.strip().lower() for r in self.config.allowed_repositories.split(",") if r.strip()
+            r.lower() for r in self.selected_repositories()
         }:
             raise PolicyError("Repository access was removed from the owner's allowlist.")
         token = self.token(ctx["repo_id"], write=True)
@@ -238,6 +332,28 @@ class GitHub:
         # Git database API avoids running git hooks, filters, or target-side scripts.
         branch = f"forge/issue-{run['issue']}-{run['id'][:10]}"
         publication = run.get("publication", {})
+        write_repo = run["repo"]
+        if not ctx.get("can_push", True):
+            if self.config.github_auth != "cli":
+                raise PolicyError("Fork publishing currently requires the owner's GitHub CLI account.")
+            owner = self.request("GET", "/user", token)["login"]
+            forks = self.request("GET", root + "/forks", token, params={"per_page": 100})
+            fork = next(
+                (f for f in forks if f.get("owner", {}).get("login", "").lower() == owner.lower()), None
+            )
+            if not fork:
+                fork = self.request("POST", root + "/forks", token, json={"default_branch_only": True})
+            write_repo = fork["full_name"]
+            verified = self.request("GET", f"/repos/{write_repo}", token)
+            if (
+                verified.get("owner", {}).get("login", "").lower() != owner.lower()
+                or verified.get("parent", {}).get("id") != ctx["repo_id"]
+            ):
+                raise PolicyError("Fork ownership or upstream identity could not be verified.")
+        write_root = f"/repos/{write_repo}"
+        if publication.get("write_repo", write_repo) != write_repo:
+            raise PolicyError("Publication account or target changed. Review a fresh proposal before retrying.")
+        head = branch if write_repo == run["repo"] else write_repo.split("/")[0] + ":" + branch
         commit_sha = publication.get("commit_sha")
         if not commit_sha:
             tree = []
@@ -253,33 +369,36 @@ class GitHub:
                     entry["content"] = change["after"]
                 tree.append(entry)
             new_tree = self.request(
-                "POST", root + "/git/trees", token, json={"base_tree": ctx["base_tree"], "tree": tree}
+                "POST", write_root + "/git/trees", token, json={"base_tree": ctx["base_tree"], "tree": tree}
             )
             commit = self.request(
                 "POST",
-                root + "/git/commits",
+                write_root + "/git/commits",
                 token,
                 json={
-                    "message": f"Fix #{run['issue']}: {ctx['title'][:120]}\n\nForge candidate {candidate['fingerprint']}",
+                    "message": f"{ctx['title'][:120]}\n\nForge candidate {candidate['fingerprint']}",
                     "tree": new_tree["sha"],
                     "parents": [candidate["base_sha"]],
                 },
             )
             commit_sha = commit["sha"]
-            persist(dict(branch=branch, commit_sha=commit_sha))
-        refs = self.request("GET", root + "/git/matching-refs/heads/" + branch, token)
+            persist(dict(branch=branch, commit_sha=commit_sha, write_repo=write_repo))
+        refs = self.request("GET", write_root + "/git/matching-refs/heads/" + branch, token)
         exact = [r for r in refs if r["ref"] == "refs/heads/" + branch]
         if exact and exact[0]["object"]["sha"] != commit_sha:
             raise PolicyError("Publication branch contains unexpected changes. It will not be overwritten.")
         if not exact:
             self.request(
-                "POST", root + "/git/refs", token, json={"ref": "refs/heads/" + branch, "sha": commit_sha}
+                "POST",
+                write_root + "/git/refs",
+                token,
+                json={"ref": "refs/heads/" + branch, "sha": commit_sha},
             )
         prs = self.request(
             "GET",
             root + "/pulls",
             token,
-            params={"head": run["repo"].split("/")[0] + ":" + branch, "state": "all"},
+            params={"head": write_repo.split("/")[0] + ":" + branch, "state": "all"},
         )
         if prs:
             pr = prs[0]
@@ -301,13 +420,19 @@ class GitHub:
                 token,
                 json={
                     "title": ctx["title"][:200],
-                    "head": branch,
+                    "head": head,
                     "base": ctx["branch"],
                     "draft": True,
                     "body": body,
                 },
             )
-        return dict(branch=branch, commit_sha=commit_sha, pr_url=pr["html_url"], pr_number=pr["number"])
+        return dict(
+            branch=branch,
+            commit_sha=commit_sha,
+            write_repo=write_repo,
+            pr_url=pr["html_url"],
+            pr_number=pr["number"],
+        )
 
 
 def read_archive(content: bytes) -> dict[str, str]:

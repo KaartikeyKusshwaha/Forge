@@ -123,3 +123,63 @@ def test_tamper_or_expiry_blocks_github_writes(monkeypatch, publication):
     with pytest.raises(PolicyError, match="changed"):
         github.publish(publication, lambda _: None)
     assert not writes
+
+
+def test_external_contribution_writes_only_to_verified_owner_fork(monkeypatch, publication, tmp_path):
+    github, writes = fake_github(monkeypatch)
+    github.config = Settings(
+        github_auth="cli",
+        allowed_repositories="owner/repo",
+        publish_enabled=True,
+        data_dir=tmp_path,
+        _env_file=None,
+    )
+    publication["context"]["can_push"] = False
+    original_request = github.request
+
+    def request(method, path, token, **kwargs):
+        if path == "/user":
+            return {"login": "contributor"}
+        if path.endswith("/forks"):
+            if method == "GET":
+                return []
+            writes.append((path, kwargs["json"]))
+            return {"full_name": "contributor/repo"}
+        if path == "/repos/contributor/repo":
+            return {"owner": {"login": "contributor"}, "parent": {"id": 1}}
+        return original_request(method, path, token, **kwargs)
+
+    monkeypatch.setattr(github, "request", request)
+    result = github.publish(publication, lambda _: None)
+    assert result["write_repo"] == "contributor/repo"
+    assert all(path.startswith("/repos/contributor/repo/git/") for path, _ in writes if "/git/" in path)
+    assert writes[-1][0] == "/repos/owner/repo/pulls"
+    assert writes[-1][1]["head"].startswith("contributor:")
+    assert writes[-1][1]["draft"] is True
+
+
+def test_foreign_fork_identity_blocks_commit(monkeypatch, publication, tmp_path):
+    github, writes = fake_github(monkeypatch)
+    github.config = Settings(
+        github_auth="cli",
+        allowed_repositories="owner/repo",
+        publish_enabled=True,
+        data_dir=tmp_path,
+        _env_file=None,
+    )
+    publication["context"]["can_push"] = False
+    original_request = github.request
+
+    def request(method, path, token, **kwargs):
+        if path == "/user":
+            return {"login": "contributor"}
+        if path.endswith("/forks"):
+            return [{"full_name": "attacker/repo", "owner": {"login": "contributor"}}]
+        if path == "/repos/attacker/repo":
+            return {"owner": {"login": "attacker"}, "parent": {"id": 99}}
+        return original_request(method, path, token, **kwargs)
+
+    monkeypatch.setattr(github, "request", request)
+    with pytest.raises(PolicyError, match="identity"):
+        github.publish(publication, lambda _: None)
+    assert not writes

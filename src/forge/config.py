@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     @property
     def github_ready(self) -> bool:
         if self.github_auth == "cli":
-            return bool(self.allowed_repositories.strip())
+            return bool(self.allowed_repositories.strip() or (self.data_dir / "repositories.json").exists())
         return bool(self.github_app_id and self.github_private_key_path and self.github_installation_id)
 
     @property

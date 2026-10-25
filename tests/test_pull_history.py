@@ -12,6 +12,13 @@ def test_pull_history_tracks_state_without_writing(monkeypatch):
 
     def request(method, path, token):
         calls.append((method, path))
+        if path.endswith("commits?per_page=100"):
+            return [
+                {
+                    "sha": "a" * 40,
+                    "commit": {"message": "Fix validation", "committer": {"date": "2026-10-24T10:00:00Z"}},
+                }
+            ]
         if "/pulls/" in path:
             return {
                 "state": "closed",
@@ -30,6 +37,7 @@ def test_pull_history_tracks_state_without_writing(monkeypatch):
     monkeypatch.setattr(github, "request", request)
     result = github.pull_history("owner/repo", 2)
     assert result["state"] == "merged"
+    assert result["commits"][0]["sha"] == "a" * 40
     assert [e["event"] for e in result["events"]] == ["opened", "review_requested", "merged"]
     assert all(method == "GET" for method, _ in calls)
 
