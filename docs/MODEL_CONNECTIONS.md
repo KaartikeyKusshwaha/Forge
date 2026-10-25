@@ -105,3 +105,6 @@ Credentials are stripped from the child environment. No pasted command is execut
 no Docker is installed, and no repository dependency is installed on the user's host.
 Other systems/runtime installers show a manual setup path. Install/download tests
 are mocked; no runtime was installed on the user's device during development.
+
+
+Version 0.5.1 scopes saved environment bindings to their endpoint, expands JSON/native authentication-header parsing, and retries connection after an approved local setup action completes. The retry does not approve subsequent installation or download steps.

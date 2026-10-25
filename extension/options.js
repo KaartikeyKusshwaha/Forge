@@ -31,8 +31,10 @@ let setupValues = {};
 let endpointConsent = false;
 let billingConsent = false;
 let setupEndpoint = "";
+let localSetupJob = null;
+let localSetupChecking = false;
 for (const id of ["model-key", "model-command", "model-endpoint", "model-environment", "model-policy"]) document.querySelector("#" + id).addEventListener("input",()=>{
-  endpointConsent=false;billingConsent=false;setupEndpoint="";setupValues={};setupState=null;document.querySelector("#integration-setup").hidden=true;
+  endpointConsent=false;billingConsent=false;setupEndpoint="";setupValues={};setupState=null;localSetupJob=null;document.querySelector("#integration-setup").hidden=true;
 });
 function setupView(setup) {
   setupState = setup;
@@ -53,7 +55,7 @@ function setupView(setup) {
   if(setup.needs === "local_runtime"){
     const note=document.createElement("p");note.textContent="Setup can install Ollama with WinGet on Windows, launch it, and download a model. Each button authorizes only that action. Models may use several GB of disk/RAM. No Docker.";box.append(note);
     const model=document.createElement("input");model.id="setup-local-model";model.placeholder="Model tag, e.g. qwen2.5-coder:7b";model.setAttribute("aria-label","Local model tag");box.append(model);
-    for(const [action,label] of [["install_ollama","Approve installing Ollama on this device"],["start_ollama","Approve starting Ollama locally"],["pull_model","Approve downloading this local model"]]){const b=document.createElement("button");b.type="button";b.textContent=label;b.addEventListener("click",async()=>{b.disabled=true;try{await call("device-setup-action",{body:{action,consent:true,model:model.value.trim()}});modelMessage.textContent="Local setup started. Checking progress…";}catch(error){modelMessage.textContent=error.message;}finally{b.disabled=false;}});box.append(b);}
+    for(const [action,label] of [["install_ollama","Approve installing Ollama on this device"],["start_ollama","Approve starting Ollama locally"],["pull_model","Approve downloading this local model"]]){const b=document.createElement("button");b.type="button";b.textContent=label;b.addEventListener("click",async()=>{b.disabled=true;try{const result=await call("device-setup-action",{body:{action,consent:true,model:model.value.trim()}});localSetupJob=result.job_id;modelMessage.textContent="Local setup started. Connection will retry when this action completes.";}catch(error){modelMessage.textContent=error.message;}finally{b.disabled=false;}});box.append(b);}
   }
   const resume=document.createElement("button");resume.type="button";
   resume.textContent=setup.needs === "free_plan" ? "Confirm Free plan and continue" : ["billing_guard","pricing"].includes(setup.needs) ? "Confirm provider billing controls and continue" : setup.needs === "endpoint_consent" ? "Approve this endpoint and continue" : "Save setup and retry connection";
@@ -123,7 +125,19 @@ document.querySelector("#model-connection").addEventListener("submit",async even
 });
 document.querySelector("#helper-connect").addEventListener("click",async()=>{const button=document.querySelector("#helper-connect");button.disabled=true;try{await call("setup-helper-connect",{body:{api_key:document.querySelector("#helper-key").value,groq_confirmed:document.querySelector("#helper-free").checked,activate:false}});document.querySelector("#helper-key").value="";document.querySelector("#helper-status").textContent="Your Groq setup assistant is connected. The coding model is unchanged.";}catch(error){document.querySelector("#helper-status").textContent=error.message;}finally{button.disabled=false;}});
 document.querySelector("#setup-help").addEventListener("click",async()=>{const button=document.querySelector("#setup-help");button.disabled=true;try{const result=await call("setup-helper-analyze",{body:{command:document.querySelector("#model-command").value,endpoint:document.querySelector("#model-endpoint").value}});document.querySelector("#setup-help-result").textContent=[result.summary || result.message,...(result.steps || [])].filter(Boolean).join("\n");}catch(error){document.querySelector("#setup-help-result").textContent=error.message;}finally{button.disabled=false;}});
-setInterval(async()=>{if(setupState?.needs === "local_runtime")try{const data=await call("device-setup-status");modelMessage.textContent=(data.jobs || []).map(j=>`${j.action}: ${j.status} · ${j.message}`).join("\n") || "Waiting for local setup approval.";}catch{}},3000);
+setInterval(async()=>{
+  if(setupState?.needs !== "local_runtime" || localSetupChecking)return;
+  localSetupChecking=true;
+  try{
+    const data=await call("device-setup-status");
+    modelMessage.textContent=(data.jobs || []).map(j=>`${j.action}: ${j.status} · ${j.message}`).join("\n") || "Waiting for local setup approval.";
+    const job=(data.jobs || []).find(j=>j.id===localSetupJob);
+    if(job && ["complete","started","failed"].includes(job.status)){
+      localSetupJob=null;
+      if(job.status !== "failed")document.querySelector("#model-connection").requestSubmit();
+    }
+  }catch{}finally{localSetupChecking=false;}
+},3000);
 setInterval(()=>{if(!document.querySelector("#model-panel").hidden)loadSpending().catch(()=>{});},5000);
 document.querySelector("#change-connection").addEventListener("click", () => {
   document.querySelector("#connection").hidden = false;

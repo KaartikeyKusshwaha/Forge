@@ -92,9 +92,10 @@ def parse_example(key="", endpoint="", code="", environment="", supplied=None):
         endpoint = bases[0]
     key_patterns = [
         r"(?m)(?:export\s+|set\s+|\$env:)?[A-Z][A-Z0-9_]*(?:API_KEY|TOKEN)\s*=\s*[\"']?([^\s\"';]+)",
-        r"(?i)(?:api_key|apiKey|apikey|x-api-key)\s*[=:]\s*[\"']([^\"']+)",
+        r"(?i)(?:api_key|apiKey|apikey|x-api-key|x-goog-api-key)[\"']?\s*[=:]\s*[\"']([^\"']+)",
+        r"(?i)(?:x-api-key|x-goog-api-key)\s*:\s*([^\s\"']+)",
         r"(?i)(?:authorization\s*:\s*bearer|bearer)\s+([^\s\"'`]+)",
-        r"(?i)[\"'](?:x-api-key|api-key)[\"']\s*:\s*[\"']([^\"']+)",
+        r"(?i)[\"'](?:x-api-key|api-key|x-goog-api-key)[\"']\s*:\s*[\"']([^\"']+)",
     ]
     if not key:
         for pattern in key_patterns:
@@ -349,9 +350,16 @@ def prepare_connection(body, config, vault):
     """Return a public setup prompt or a saved profile. Never echo input keys."""
     from forge.models import protect
 
+    # Saved variable names are integration-local: API_KEY on one service must
+    # never silently select another service's credential.
+    initial = parse_example(
+        body.api_key, body.endpoint, body.command, body.environment, body.environment_values
+    )
+    target = initial.get("endpoint", "")
+    target = endpoint_base(target)[0] if target else ""
     bindings = {}
     for profile in vault.list()["profiles"]:
-        if profile.get("environment_names"):
+        if target and profile.get("endpoint") == target and profile.get("environment_names"):
             record = vault.read(profile["id"])
             for name in record["environment_names"]:
                 bindings.setdefault(name, set()).add(protect(record["key"], True))

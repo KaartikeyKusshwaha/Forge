@@ -44,6 +44,29 @@ const assert=require("node:assert/strict");
   assert.equal(await page.locator("#model-command").inputValue(),"");
   assert.equal(await page.locator("#integration-setup").isVisible(),false);
   await page.screenshot({path:"test-results/forge-integration-settings.png",fullPage:true});
+  await page.evaluate(()=>{
+    window.localReady=false;window.localConnectCount=0;
+    const old=chrome.runtime.sendMessage;
+    chrome.runtime.sendMessage=async message=>{
+      if(message.action==="model-connect"){
+        window.localConnectCount++;
+        return {ok:true,data:window.localReady ? window.savedProfiles : {setup:{needs:"local_runtime",endpoint:"http://127.0.0.1:11434/v1",message:"Local runtime unavailable"}}};
+      }
+      if(message.action==="device-setup-action"){
+        window.deviceActions.push(message.body);window.localReady=true;
+        return {ok:true,data:{job_id:"fixture-job"}};
+      }
+      if(message.action==="device-setup-status")return {ok:true,data:{jobs:[{id:"fixture-job",action:"start_ollama",status:"started",message:"Ready"}]}};
+      return old(message);
+    };
+  });
+  await page.getByRole("button",{name:"Endpoint",exact:true}).click();
+  await page.getByLabel("Provider endpoint",{exact:true}).fill("http://127.0.0.1:11434/v1");
+  await page.getByRole("button",{name:"Detect, verify & connect",exact:true}).click();
+  await page.getByRole("button",{name:"Approve starting Ollama locally",exact:true}).click();
+  await page.waitForFunction(()=>window.localConnectCount === 2,{timeout:10000});
+  await page.locator("#integration-setup").waitFor({state:"hidden"});
+  assert.equal((await page.evaluate(()=>window.deviceActions))[0].consent,true);
   console.log("PASS missing-environment setup, endpoint consent, billing confirmation, automatic profile and secret field cleanup");
  }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

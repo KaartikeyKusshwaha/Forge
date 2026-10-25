@@ -56,6 +56,47 @@ def test_missing_environment_can_be_supplied_at_connection_time(monkeypatch, tmp
     assert parsed["key"] == "opaque-fixture-secret"
 
 
+@pytest.mark.parametrize(
+    "code",
+    [
+        '{"api_key":"opaque-json-secret","base_url":"https://example.com/v1","model":"coder"}',
+        'curl https://example.com/v1/messages -H "x-api-key: opaque-json-secret"',
+        'curl https://generativelanguage.googleapis.com/v1beta/openai/models -H "x-goog-api-key: opaque-json-secret"',
+    ],
+)
+def test_json_and_native_auth_headers_extract_key(code):
+    assert parse_example(code=code)["key"] == "opaque-json-secret"
+
+
+def test_saved_environment_credentials_are_scoped_to_endpoint(monkeypatch, tmp_path, setup):
+    config, _, client = setup
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SHARED_API_KEY", raising=False)
+    requests = []
+    monkeypatch.setattr("forge.integrations.validate_remote", lambda value: value)
+
+    def get(url, **kwargs):
+        requests.append((url, kwargs))
+        return httpx.Response(200, request=httpx.Request("GET", url), json={"data": [{"id": "coder"}]})
+
+    monkeypatch.setattr("forge.integrations.httpx.get", get)
+    body = {
+        "command": 'client=OpenAI(base_url="https://first.example/v1",api_key=os.getenv("SHARED_API_KEY"))',
+        "environment_values": {"SHARED_API_KEY": "first-provider-secret"},
+        "endpoint_consent": True,
+        "billing_guard_confirmed": True,
+    }
+    assert "profiles" in client.post("/api/model-profiles", json=body).json()
+    body["environment_values"] = {}
+    assert "profiles" in client.post("/api/model-profiles", json=body).json()
+    calls = len(requests)
+    body["command"] = body["command"].replace("first.example", "second.example")
+    response = client.post("/api/model-profiles", json=body)
+    assert response.json()["setup"]["needs"] == "environment"
+    assert len(requests) == calls
+    assert "first-provider-secret" not in response.text
+
+
 def test_connection_setup_requires_destination_and_billing_consent(monkeypatch, setup):
     config, _, client = setup
     requests = []
