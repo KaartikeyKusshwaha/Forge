@@ -150,7 +150,10 @@ with disposable_source() as directory:
                         setup["generated_lock"] = True
                     install = [shutil.which("npm"), "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--cache", str(work / ".npm-cache"), "--userconfig=/dev/null"]
                 elif manager in {"pnpm", "yarn"} and shutil.which("corepack"):
-                    install = [shutil.which("corepack"), manager, "install", "--frozen-lockfile"]
+                    install = [shutil.which("corepack"), manager, "install"]
+                    lock = "pnpm-lock.yaml" if manager == "pnpm" else "yarn.lock"
+                    install.append("--frozen-lockfile" if lock in files else "--no-frozen-lockfile")
+                    if lock not in files: setup["generated_lock"] = True
                     if manager == "pnpm": install.append("--ignore-scripts")
                 else:
                     raise ValueError("Package manager unavailable: " + manager + ". Configure the trusted runner toolchain.")
@@ -158,6 +161,8 @@ with disposable_source() as directory:
                 setup["output"] += output
                 if code:
                     raise ValueError("Node dependency installation failed.")
+                for lock in ("package-lock.json", "pnpm-lock.yaml", "yarn.lock"):
+                    if (work / lock).is_file(): setup["lock_sha256"] = hashlib.sha256((work / lock).read_bytes()).hexdigest()
                 setup["status"] = "ready"
         except (ValueError, subprocess.SubprocessError) as exc:
             setup["status"] = "failed"

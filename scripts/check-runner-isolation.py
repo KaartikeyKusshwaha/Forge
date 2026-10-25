@@ -43,6 +43,12 @@ node_build_files = {
         "devDependencies":{"playwright":"1.62.1"}}),
     "browser.test.js": "const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const {chromium}=require('playwright');test('offline build and headless browser',async()=>{assert.equal(fs.readFileSync('built.txt','utf8'),'ready');assert.equal(process.getuid(),65534);const browser=await chromium.launch({headless:true,args:['--no-sandbox']});try{const page=await browser.newPage();await page.setContent('<button>Works</button>');assert.equal(await page.locator('button').textContent(),'Works');}finally{await browser.close();}});",
 }
+manager_fixtures = []
+for manager, version in [("pnpm", "10.21.0"), ("yarn", "1.22.22")]:
+    manager_fixtures.append(("typescript", {
+        "package.json": json.dumps({"name":"forge-manager-fixture","version":"1.0.0","packageManager":manager+"@"+version,"scripts":{"test":"node --test"},"dependencies":{"is-number":"7.0.0"}}),
+        "manager.test.js": "const {test}=require('node:test');const assert=require('node:assert/strict');test('package manager dependency',()=>assert.equal(require('is-number')(42),true));",
+    }, 1))
 # Seed fake secrets in the controller so absence tests prove non-inheritance.
 os.environ.update(GROQ_API_KEY="fixture-not-a-secret", FORGE_LLM_API_KEY="fixture-not-a-secret")
 reports = []
@@ -50,7 +56,7 @@ for profile, files, expected in [("python", {"test_isolation.py": python_tests},
                                  ("python", project_files, 1),
                                  ("typescript", {"isolation.test.ts": node_tests}, 1),
                                  ("typescript", node_project_files, 1),
-                                 ("typescript", node_build_files, 1)]:
+                                 ("typescript", node_build_files, 1), *manager_fixtures]:
     raw = json.dumps(files, sort_keys=True, separators=(",", ":")).encode()
     os.environ.update(FORGE_REQUEST_ID=uuid.uuid4().hex, FORGE_PROFILE=profile,
         FORGE_SNAPSHOT=base64.b64encode(gzip.compress(raw)).decode(),
