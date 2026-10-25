@@ -202,3 +202,26 @@ instructions into a new sandbox-checked proposal. On a new repository it enables
 public source analysis first. Approval of the exact candidate is still required
 before any target commit or PR. Published PRs remain preserved; follow-ups create
 new proposals using the existing revision flow.
+
+## Model output recovery on each installation
+
+Forge uses the user's connected model and spending policy for recovery. It does
+not require the developer's API key or a separate Groq connection. Engineering
+roles share typed output contracts. For models advertising function output,
+Forge requests a named result function and reads its JSON arguments as data;
+there is no executable tool behind that output function. Other models use their
+advertised JSON mode or schema instructions.
+
+Malformed JSON, schema mismatches and truncated responses trigger up to two
+correction attempts. Unsupported output controls fall back to schema instructions.
+Every attempt remains subject to call/token limits, cancellation, paid-call
+permission and spending caps. Rejected requests retain conservative financial
+reservations; their token count uses reported usage, or zero when none is reported.
+Authentication refusals, model access restrictions and exhausted budgets stop
+rather than triggering another format-repair loop. Sandbox checks and exact-change
+approval still run separately after a valid proposal is produced.
+
+Protocol fixtures cover OpenAI-compatible, Anthropic-style and Responses-style
+messages. This is coverage of those protocol adapters, not a claim that every
+provider or operating-system configuration has been tested. Each installation
+still needs its own credentials, GitHub permissions and configured trusted runner.

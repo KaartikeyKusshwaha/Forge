@@ -229,7 +229,7 @@ def test_native_text_adapters_send_correct_auth_and_read_output(monkeypatch, pro
         _env_file=None,
     )
     assert Provider(config, {"calls": 0, "tokens": 0}, lambda _: None, lambda: False).ask(
-        "coder", "Fix", {}
+        "diagnostic", "Fix", {}
     ) == {"summary": "ok"}
     assert requests[0][0].endswith("/messages" if protocol == "anthropic" else "/responses")
     if protocol == "anthropic":

@@ -122,9 +122,9 @@ def test_local_provider_omits_empty_authorization_header(monkeypatch):
         _env_file=None,
     )
     assert (
-        Provider(config, {"calls": 0, "tokens": 0}, lambda _: None, lambda: False).ask("planner", "Plan", {})[
-            "summary"
-        ]
+        Provider(config, {"calls": 0, "tokens": 0}, lambda _: None, lambda: False).ask(
+            "diagnostic", "Plan", {}
+        )["summary"]
         == "ok"
     )
     assert captured == [{}]

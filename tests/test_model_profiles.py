@@ -255,7 +255,9 @@ def test_provider_does_not_send_paid_request_until_owner_grants_permission(monke
     monkeypatch.setattr("forge.llm.httpx.Client", Client)
     thread = threading.Thread(
         target=lambda: results.append(
-            Provider(config, {"calls": 0, "tokens": 0}, lambda _: None, lambda: False).ask("coder", "Fix", {})
+            Provider(config, {"calls": 0, "tokens": 0}, lambda _: None, lambda: False).ask(
+                "diagnostic", "Fix", {}
+            )
         )
     )
     thread.start()

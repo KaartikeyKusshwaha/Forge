@@ -2,41 +2,15 @@ import threading
 import time
 import uuid
 
-from pydantic import BaseModel, Field
-
 from forge.actions import ActionsSandbox
 from forge.config import Settings
+from forge.contracts import Changes, Edit, Plan, Review
 from forge.github import GitHub, GitHubError, demo_context
 from forge.index import retrieve
 from forge.llm import Provider, verify_free
 from forge.policy import PolicyError, apply_edits, seal_candidate
 from forge.sandbox import DemoSandbox, demo_candidate
 from forge.store import Conflict, Store
-
-
-class Edit(BaseModel):
-    path: str = Field(max_length=250)
-    content: str | None = Field(max_length=500_000)
-
-
-class Changes(BaseModel):
-    summary: str = Field(max_length=4000)
-    edits: list[Edit] = Field(min_length=1, max_length=10)
-
-
-class Plan(BaseModel):
-    summary: str = Field(max_length=4000)
-    steps: list[str] = Field(min_length=1, max_length=12)
-    acceptance: list[str] = Field(min_length=1, max_length=12)
-    files: list[str] = Field(max_length=20)
-    needs_input: bool = False
-    question: str = Field(default="", max_length=2000)
-
-
-class Review(BaseModel):
-    summary: str = Field(max_length=4000)
-    findings: list[str] = Field(max_length=20)
-    acceptable: bool
 
 
 class Worker:

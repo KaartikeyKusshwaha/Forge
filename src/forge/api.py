@@ -95,7 +95,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     async def lifespan(app):
         yield
 
-    app = FastAPI(title="Forge", version="0.6.1", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Forge", version="0.6.2", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
     app.state.store = db
     vault = ModelVault(config)
@@ -157,7 +157,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
 
     @app.get("/health")
     def health():
-        return {"service": "forge", "version": "0.6.1", "status": "ok"}
+        return {"service": "forge", "version": "0.6.2", "status": "ok"}
 
     @app.get("/api/status", dependencies=[Depends(authenticated)])
     def status():
