@@ -41,7 +41,7 @@ files = json.loads(raw)
 if not isinstance(files, dict) or len(files) > 10_000:
     raise SystemExit("Invalid source inventory")
 
-with tempfile.TemporaryDirectory(prefix="forge-isolated-", dir="/tmp") as directory:
+with tempfile.TemporaryDirectory(prefix="forge-isolated-", dir="/tmp", ignore_cleanup_errors=True) as directory:
     work = Path(directory)
     work.chmod(0o777)
     for path, text in files.items():
@@ -158,7 +158,7 @@ with tempfile.TemporaryDirectory(prefix="forge-isolated-", dir="/tmp") as direct
     if profile == "python":
         try:
             root = ET.parse(work / "results.xml").getroot()
-            count = sum(int(s.get("tests", 0)) - int(s.get("skipped", 0)) for s in root.iter("testsuite"))
+            count = sum(max(0, int(s.get("tests", 0)) - int(s.get("skipped", 0)) - int(s.get("errors", 0))) for s in root.iter("testsuite"))
         except (OSError, ET.ParseError, ValueError):
             pass
     else:
