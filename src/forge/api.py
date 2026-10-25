@@ -111,6 +111,17 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
             )
         return {"runs": result}
 
+    @app.get("/api/runs/{run_id}/pull-history", dependencies=[Depends(authenticated)])
+    def pull_history(run_id: str):
+        run = get_run(run_id)
+        url = run.get("publication", {}).get("pr_url", "")
+        import re
+
+        match = re.fullmatch(r"https://github\.com/" + re.escape(run["repo"]) + r"/pull/(\d+)", url)
+        if not match:
+            raise HTTPException(409, "This run has no published pull request.")
+        return GitHub(config).pull_history(run["repo"], int(match[1]))
+
     @app.post("/api/runs", status_code=201, dependencies=[Depends(authenticated)])
     def new_run(body: NewRun):
         if body.mode == "demo" and not config.demo_enabled:

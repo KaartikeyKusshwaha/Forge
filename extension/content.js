@@ -37,7 +37,7 @@
     return response.data;
   };
   const state = {open: false, tab: "progress", run: null, service: null, error: "", busy: false,
-    history: null, confirm: false, revision: false, route: location.pathname, selectedFile: 0, selectedCheck: 0};
+    history: null, pullHistory: null, confirm: false, revision: false, feedback: "", route: location.pathname, selectedFile: 0, selectedCheck: 0};
   let timer;
   const activeStatuses = ["queued", "snapshotting", "indexing", "baseline", "planning", "coding", "testing", "validating", "reviewing", "repairing", "publishing"];
   const phases = [
@@ -140,13 +140,12 @@
     if (!r) return `<footer class="bottom-bar"><span class="small-dot"></span> YOUR REPOSITORY. YOUR CALL.<span>v0.2</span></footer>`;
     if (r.status === "awaiting_approval") {
       if (r.mode !== "demo" && r.approval_expires_at && Date.now() / 1000 > r.approval_expires_at) {
-        return `<footer class="approval-footer"><div class="approval-label">${icon("clock", 16)}This review window expired. Fresh validation is needed.</div>${button("refresh", "Refresh proposal and checks", "primary wide", "arrow")}<div class="footer-actions">${button("reject", "Reject", "text-button")}${button("download", "Download old patch", "text-button")}</div></footer>`;
+        return `<footer class="approval-footer"><div class="approval-label">${icon("clock", 16)}This review window expired. Fresh validation is needed.</div>${button("refresh", "Refresh proposal and checks", "primary wide", "arrow")}<div class="footer-actions">${button("revision", "Suggest changes", "text-button")}${button("reject", "Reject", "text-button")}${button("download", "Download old patch", "text-button")}</div></footer>`;
       }
       return `<footer class="approval-footer"><div class="approval-label">${icon("shield", 16)}${r.mode === "demo" ? "Demo ready. Nothing will be published." : "Your approval unlocks a commit and draft PR."}</div>
-      ${state.revision ? `<label class="revision-label" for="forge-feedback">What should change?</label><textarea id="forge-feedback" rows="3" maxlength="4000" placeholder="Describe the correction or missing requirement…"></textarea>${button("submit-revision", "Request a fresh proposal", "secondary wide", "arrow")}` : ""}
       ${state.confirm && r.mode !== "demo" ? `<label class="consent"><input type="checkbox" id="forge-ci-consent">I reviewed the diff and checks. Publishing may trigger repository CI.</label>` : ""}
       ${button(state.confirm || r.mode === "demo" ? "approve" : "review-approve", r.mode === "demo" ? "Approve demo proposal" : state.confirm ? "Confirm and create draft PR" : "Approve and create draft PR", "primary wide", "check")}
-      <div class="footer-actions">${button("reject", "Reject", "text-button")}${r.mode !== "demo" ? button("revision", state.revision ? "Cancel revision" : "Request revision", "text-button") : ""}${button("download", "Download patch", "text-button")}</div></footer>`;
+      <div class="footer-actions">${button("reject", "Reject", "text-button")}${r.mode !== "demo" ? button("revision", "Suggest changes", "text-button") : ""}${button("download", "Download patch", "text-button")}</div></footer>`;
     }
     if (r.status === "demo_complete" || r.status === "pr_opened") {
       const url = r.publication?.pr_url;
@@ -161,27 +160,39 @@
     return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
   }
 
+  function timeline() {
+    const r = state.run, pr = state.pullHistory;
+    return `<section class="section"><div class="section-label">FORGE TIMELINE <span>${(r.events || []).length} events</span></div><div class="timeline">${(r.events || []).map(e => `<div class="timeline-item"><span class="timeline-dot"></span><div><p>${esc(e.message)}</p><time>${esc(new Date(e.created * 1000).toLocaleString())}</time></div></div>`).join("")}</div></section>
+      ${r.publication?.pr_url ? `<section class="section"><div class="section-label">PULL REQUEST ${pr ? `<span>${esc(pr.state)}${pr.draft ? " · draft" : ""}</span>` : ""}</div>${button("sync-pr", "Refresh GitHub timeline", "secondary wide", "history")}${pr ? `<p class="tab-intro">Updated on GitHub: ${esc(new Date(pr.updated_at).toLocaleString())}</p><div class="timeline">${pr.events.map(e => `<div class="timeline-item"><span class="timeline-dot"></span><div><p>${esc(e.event.replaceAll("_", " "))}${e.actor ? ` · ${esc(e.actor)}` : ""}</p><time>${esc(new Date(e.created_at).toLocaleString())}</time></div></div>`).join("")}</div>${pr.limited ? '<p class="limitation">Showing the first 100 GitHub events plus current closure and merge milestones.</p>' : ""}` : '<p class="tab-intro">Refresh to read the current PR state and milestones from GitHub.</p>'}</section>` : '<p class="tab-intro">Pull request milestones appear here after an approved proposal is published.</p>'}`;
+  }
+
   function historyView() {
-    return `<div class="history-heading"><p class="eyebrow">YOUR RECENT WORK</p><h1>A trail of progress.</h1></div><div class="history-list">${state.history.length ? state.history.map(r => `<button class="history-row" data-run="${r.id}"><span class="history-run-icon">${icon(r.status === "pr_opened" || r.status === "demo_complete" ? "check" : "code", 17)}</span><div><strong>${esc(r.title)}</strong><p>${esc(r.repo)} · #${r.issue}</p><span>${label(r.status)}${r.mode === "demo" ? " · Demo" : ""}</span></div>${icon("chevron", 15)}</button>`).join("") : '<div class="empty-state"><h2>A fresh start.</h2><p>Your proposals will appear here.</p></div>'}</div>`;
+    return `<div class="history-heading"><p class="eyebrow">RUNS & PULL REQUESTS</p><h1>A trail of progress.</h1><p class="tab-intro">Choose a run to inspect its changes, checks and full timeline.</p></div><div class="history-list">${state.history.length ? state.history.map(r => `<button class="history-row" data-run="${r.id}"><span class="history-run-icon">${icon(r.status === "pr_opened" || r.status === "demo_complete" ? "check" : "code", 17)}</span><div><strong>${esc(r.title)}</strong><p>${esc(r.repo)} · issue #${r.issue}</p><span>${label(r.status)}${r.mode === "demo" ? " · Demo" : ""}${r.publication?.pr_url ? ` · PR #${esc(r.publication.pr_url.split("/").at(-1))}` : ""}</span><time>${esc(new Date(r.created * 1000).toLocaleString())}</time></div>${icon("chevron", 15)}</button>`).join("") : '<div class="empty-state"><h2>A fresh start.</h2><p>Your proposals and pull requests will appear here.</p></div>'}</div>`;
   }
 
   function render() {
     const focusAction = root.activeElement?.dataset?.action;
+    const feedbackFocused = root.activeElement?.id === "forge-feedback";
+    const selection = feedbackFocused ? [root.activeElement.selectionStart, root.activeElement.selectionEnd] : null;
     const scrollTop = root.querySelector(".panel-body")?.scrollTop || 0;
     const top = `<header class="topbar"><div class="wordmark"><span class="brand-mark">${icon("forge", 21)}</span><strong>forge</strong><span class="product-tag">GITHUB COMPANION</span></div><div class="top-actions">${button("history", '<span class="sr-only">Recent runs</span>', "icon-button", "history")}${button("options", '<span class="sr-only">Connection settings</span>', "icon-button", "settings")}${button("close", '<span class="sr-only">Close Forge</span>', "icon-button", "close")}</div></header>`;
     surface.innerHTML = `<button class="launcher ${state.open ? "hidden" : ""}" data-action="open" aria-label="Open Forge">${icon("forge", 20)}<strong>Forge</strong><span class="launcher-dot"></span></button>
       <aside class="panel ${state.open ? "is-open" : ""}" aria-label="Forge engineering companion" ${state.open ? "" : "inert"}>
       ${top}${state.error ? `<div class="error-banner" role="alert">${icon("warn", 16)}<span>${esc(state.error)}</span>${button("dismiss", '<span class="sr-only">Dismiss message</span>', "icon-button", "close")}</div>` : ""}
-      ${state.run && !state.history ? runHeader() + `<div class="tabs" role="tablist" aria-label="Run views">${["progress", "changes", "checks"].map(t => `<button role="tab" aria-selected="${state.tab === t}" tabindex="${state.tab === t ? 0 : -1}" data-tab="${t}" id="forge-tab-${t}" aria-controls="forge-tabpanel">${t[0].toUpperCase() + t.slice(1)}${t === "changes" && state.run.candidate ? `<span>${state.run.candidate.changes.length}</span>` : ""}</button>`).join("")}</div>` : ""}
+      ${state.run && !state.history ? runHeader() + `<div class="tabs" role="tablist" aria-label="Run views">${["progress", "changes", "checks", "timeline"].map(t => `<button role="tab" aria-selected="${state.tab === t}" tabindex="${state.tab === t ? 0 : -1}" data-tab="${t}" id="forge-tab-${t}" aria-controls="forge-tabpanel">${t[0].toUpperCase() + t.slice(1)}${t === "changes" && state.run.candidate ? `<span>${state.run.candidate.changes.length}</span>` : ""}</button>`).join("")}</div>` : ""}
       <div class="panel-body" ${state.run && !state.history ? `role="tabpanel" id="forge-tabpanel" aria-labelledby="forge-tab-${state.tab}"` : ""}>
-      ${state.history ? historyView() : state.run ? `${state.run.error ? `<div class="run-error"><strong>The run stopped here.</strong><p>${esc(state.run.error)}</p></div>` : ""}${state.run.limitations?.map(l => `<p class="limitation">${esc(l)}</p>`).join("") || ""}${state.tab === "progress" ? progress() : state.tab === "changes" ? changes() : checks()}` : landing()}</div>
-      ${state.history ? `<footer class="approval-footer">${button("back", "Back", "secondary wide", "back")}</footer>` : approvalFooter()}</aside>`;
+      ${state.history ? historyView() : state.run ? `${state.run.error ? `<div class="run-error"><strong>The run stopped here.</strong><p>${esc(state.run.error)}</p></div>` : ""}${state.run.limitations?.map(l => `<p class="limitation">${esc(l)}</p>`).join("") || ""}${state.tab === "progress" ? progress() : state.tab === "changes" ? changes() : state.tab === "timeline" ? timeline() : checks()}` : landing()}</div>
+      ${state.history ? `<footer class="approval-footer">${button("back", "Back", "secondary wide", "back")}</footer>` : approvalFooter()}
+      ${state.revision ? `<div class="feedback-overlay"><section class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="forge-feedback-title" aria-describedby="forge-feedback-help"><h2 id="forge-feedback-title">Shape the next proposal</h2><p id="forge-feedback-help">Describe a correction, an addition, or a missing requirement. Forge will retire this proposal and create a new one with fresh checks. You’ll review it before any commit.</p><label class="revision-label" for="forge-feedback">Your request</label><textarea id="forge-feedback" rows="6" minlength="10" maxlength="4000" placeholder="For example: also reject boolean values and add a regression test.">${esc(state.feedback)}</textarea>${state.error ? `<p role="alert">${esc(state.error)}</p>` : ""}<div class="feedback-actions">${button("cancel-feedback", "Cancel", "secondary")}${button("submit-revision", "Create revised proposal", "primary", "arrow")}</div></section></div>` : ""}</aside>`;
     theme();
     const body = root.querySelector(".panel-body"); if (body) body.scrollTop = scrollTop;
     if (focusAction) root.querySelector(`[data-action="${focusAction}"]`)?.focus({preventScroll: true});
+    if (feedbackFocused) {const input = root.querySelector("#forge-feedback"); input?.focus(); input?.setSelectionRange(...selection);}
+    if (state.revision) for (const child of root.querySelector(".panel").children) child.inert = !child.classList.contains("feedback-overlay");
   }
 
   async function loadRun(id) {
+    if (state.run?.id !== id) state.pullHistory = null;
     state.run = await call("run", {id});
     render();
     clearTimeout(timer);
@@ -218,15 +229,17 @@
     if (action === "dismiss") {state.error = ""; return;}
     if (action === "demo" || action === "start") return start(action === "demo" ? "demo" : "github");
     if (action === "history") {state.history = (await call("list")).runs; return;}
+    if (action === "sync-pr") {state.pullHistory = await call("pull-history", {id: state.run.id}); return;}
     if (action === "back") {state.history = null; return;}
     if (action === "new") {state.run = null; state.history = null; state.confirm = false; await call("active", {id: null}); return;}
     if (action === "review-approve") {state.tab = "changes"; state.confirm = true; return;}
-    if (action === "revision") {state.revision = !state.revision; return;}
+    if (action === "revision") {state.revision = true; state.confirm = false; return;}
+    if (action === "cancel-feedback") {state.revision = false; return;}
     if (action === "submit-revision") {
-      const feedback = root.querySelector("#forge-feedback")?.value.trim() || "";
+      const feedback = state.feedback.trim();
       if (feedback.length < 10) throw new Error("Describe the requested change in at least 10 characters.");
       const next = await call("revision", {id: state.run.id, body: {feedback, request_key: crypto.randomUUID()}});
-      state.revision = false; state.confirm = false; state.tab = "progress";
+      state.revision = false; state.feedback = ""; state.confirm = false; state.tab = "progress";
       await call("active", {id: next.id}); return loadRun(next.id);
     }
     if (action === "refresh") {
@@ -261,20 +274,31 @@
     const action = el.dataset.action; if (!action) return;
     state.error = ""; state.busy = true;
     try {await act(action);} catch(error) {state.error = error.message;}
-    finally {state.busy = false; render();}
+    finally {state.busy = false; render(); if (action === "revision") root.querySelector("#forge-feedback")?.focus(); if (action === "cancel-feedback") root.querySelector('[data-action="revision"]')?.focus();}
   });
+  root.addEventListener("input", event => {if (event.target.id === "forge-feedback") state.feedback = event.target.value;});
   root.addEventListener("keydown", event => {
+    if (state.revision) {
+      if (event.key === "Escape") {event.preventDefault(); state.revision = false; render(); root.querySelector('[data-action="revision"]')?.focus();}
+      if (event.key === "Tab") {
+        const items = [...root.querySelectorAll('.feedback-dialog textarea, .feedback-dialog button:not(:disabled)')];
+        const first = items[0], last = items.at(-1);
+        if (event.shiftKey && root.activeElement === first) {event.preventDefault(); last.focus();}
+        else if (!event.shiftKey && root.activeElement === last) {event.preventDefault(); first.focus();}
+      }
+      return;
+    }
     if (event.key === "Escape") {state.open = false; clearTimeout(timer); render(); root.querySelector(".launcher")?.focus();}
     if (event.target.dataset?.tab && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
-      event.preventDefault(); const tabs = ["progress", "changes", "checks"];
-      state.tab = tabs[(tabs.indexOf(state.tab) + (event.key === "ArrowRight" ? 1 : 2)) % 3];
+      event.preventDefault(); const tabs = ["progress", "changes", "checks", "timeline"];
+      state.tab = tabs[(tabs.indexOf(state.tab) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
       render(); root.querySelector(`[data-tab="${state.tab}"]`)?.focus();
     }
   });
   new MutationObserver(theme).observe(document.documentElement, {attributes: true, attributeFilter: ["data-color-mode", "data-dark-theme"]});
   setInterval(() => {
     if (location.pathname !== state.route) {
-      state.route = location.pathname; state.run = null; state.history = null; state.confirm = false;
+      state.route = location.pathname; state.run = null; state.history = null; state.confirm = false; state.revision = false; state.feedback = "";
       clearTimeout(timer); call("active", {id: null}).catch(() => {}); render();
     }
   }, 1200);

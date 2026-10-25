@@ -118,6 +118,34 @@ class GitHub:
                 break
         return result
 
+    def pull_history(self, repo: str, number: int) -> dict:
+        """Read PR milestones within the configured installation; never execute code."""
+        self.validate_repo(repo)
+        selected = next((r for r in self.repositories() if r["name"].lower() == repo.lower()), None)
+        if not selected or selected["private"]:
+            raise GitHubError("Pull request is outside the configured public repositories.")
+        token = self.token(selected["id"])
+        pull = self.request("GET", f"/repos/{repo}/pulls/{number}", token)
+        events = self.request("GET", f"/repos/{repo}/issues/{number}/events?per_page=100", token)
+        milestones = [{"event": "opened", "created_at": pull["created_at"]}]
+        milestones.extend(
+            {"event": e["event"], "created_at": e["created_at"], "actor": (e.get("actor") or {}).get("login")}
+            for e in events
+            if e.get("created_at")
+        )
+        for name in ("closed", "merged"):
+            if pull.get(name + "_at"):
+                milestones.append({"event": name, "created_at": pull[name + "_at"]})
+        unique = {(e["event"], e["created_at"]): e for e in milestones}
+        return {
+            "number": number,
+            "state": "merged" if pull.get("merged_at") else pull["state"],
+            "draft": pull.get("draft", False),
+            "updated_at": pull["updated_at"],
+            "events": sorted(unique.values(), key=lambda e: e["created_at"]),
+            "limited": len(events) == 100,
+        }
+
     def context(self, repo: str, issue: int) -> dict:
         self.validate_repo(repo)
         if self.config.github_auth == "cli" and repo.lower() not in {

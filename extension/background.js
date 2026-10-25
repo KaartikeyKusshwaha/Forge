@@ -26,6 +26,7 @@ function allowedRequest(message) {
       return ["POST", "/api/runs", data];
     }
     case "run": if (runPath) return ["GET", runPath]; break;
+    case "pull-history": if (runPath) return ["GET", runPath + "/pull-history"]; break;
     case "patch": if (runPath) return ["GET", runPath + "/patch", null, true]; break;
     case "cancel": case "reject": if (runPath) return ["POST", runPath + "/" + message.action]; break;
     case "approve":

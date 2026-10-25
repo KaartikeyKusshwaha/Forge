@@ -6,7 +6,8 @@
   <p class="eyebrow">YOUR WORKSPACE, CONNECTED</p>
   <h1>A little setup.<br>A lot less busywork.</h1>
   <p class="intro">Connect this browser to your local Forge service. Your GitHub issues stay at the centre of the work.</p>
-  <form id="connection">
+  <section id="connected" hidden><h2>Connected to Forge</h2><p>Your browser is paired. Open a GitHub issue to start or review a proposal.</p><button id="change-connection" type="button">Change connection</button><button id="check-connection" type="button">Check connection</button></section>
+  <form id="connection" hidden>
     <label for="endpoint">Service address</label><input id="endpoint" type="url" value="http://127.0.0.1:8787" required>
     <label for="token">Owner token</label><input id="token" type="password" autocomplete="off" placeholder="Paste from .forge/owner-token" required minlength="24">
     <p class="hint">Stored on this browser only. Never shared with the GitHub page.</p>
