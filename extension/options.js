@@ -84,7 +84,8 @@ document.querySelectorAll("[data-method]").forEach(button => button.addEventList
   document.querySelector("#key-fields").hidden = connectionMethod === "cli";
 }));
 document.querySelector("#model-policy").addEventListener("change", event => {
-  document.querySelector("#model-budget-fields").hidden = event.target.value === "free_only";
+  document.querySelector("#model-budget-fields").hidden = !["capped","ask_paid"].includes(event.target.value);
+  document.querySelector("#model-limit-fields").hidden = event.target.value !== "limited";
 });
 
 function profileView(data) {
@@ -92,7 +93,13 @@ function profileView(data) {
   for (const profile of data.profiles || []) {
     const box = document.createElement("article"); box.className="model-profile";
     const heading = document.createElement("h3"); heading.textContent=profile.label + (profile.active ? " · Active" : ""); box.append(heading);
-    const info=document.createElement("p"); info.textContent=`${profile.provider} · ${profile.mode} · reserved/spent $${Number(profile.spent_usd || 0).toFixed(6)} / $${Number(profile.budget_usd).toFixed(2)}`; box.append(info);
+    const info=document.createElement("p"); info.textContent=`${profile.provider} · ${profile.mode === "unlimited" ? "No Forge usage cap" : profile.mode === "limited" ? "Call and token limits" : profile.mode === "free_only" ? "Free usage" : profile.mode}`; box.append(info);
+    const policy=document.createElement("select");policy.setAttribute("aria-label",`Usage policy for ${profile.label}`);
+    for(const [value,label] of [["free_only","Free usage"],["limited","Limited API usage"],["unlimited","Unlimited · no Forge usage cap"]]){const option=document.createElement("option");option.value=value;option.textContent=label;option.selected=profile.mode===value;policy.append(option);}box.append(policy);
+    const calls=document.createElement("input");calls.type="number";calls.min="1";calls.value=profile.call_limit || 100;calls.setAttribute("aria-label",`API call limit for ${profile.label}`);
+    const tokens=document.createElement("input");tokens.type="number";tokens.min="1000";tokens.value=profile.token_limit || 1000000;tokens.setAttribute("aria-label",`Token limit for ${profile.label}`);
+    function policyFields(){calls.hidden=tokens.hidden=policy.value!=="limited";}policy.addEventListener("change",policyFields);policyFields();box.append(calls,tokens);
+    const savePolicy=document.createElement("button");savePolicy.type="button";savePolicy.textContent="Save usage permissions";savePolicy.addEventListener("click",async()=>{savePolicy.disabled=true;try{profileView(await call("model-policy",{id:profile.id,body:{mode:policy.value,call_limit:Number(calls.value),token_limit:Number(tokens.value)}}));await inspect();}catch(error){modelMessage.textContent=error.message;}finally{savePolicy.disabled=false;}});box.append(savePolicy);
     if(profile.endpoint){const endpoint=document.createElement("p");endpoint.textContent=profile.endpoint;box.append(endpoint);}
     if(profile.billing_basis){const note=document.createElement("p");note.textContent=profile.billing_basis;box.append(note);}
     const select=document.createElement("select"); select.setAttribute("aria-label",`Model for ${profile.label}`);
@@ -115,7 +122,7 @@ document.querySelector("#model-connection").addEventListener("submit",async even
   const button=event.target.querySelector('button[type="submit"]');button.disabled=true;modelMessage.textContent="Detecting provider and checking model access…";
   try{
     const mode=document.querySelector("#model-policy").value;
-    const body={api_key:document.querySelector("#model-key").value,provider:"auto",label:document.querySelector("#model-label").value,mode,budget_usd:mode === "free_only" ? 0 : Number(document.querySelector("#model-budget").value),groq_confirmed:document.querySelector("#model-groq-confirmed").checked,
+    const body={api_key:document.querySelector("#model-key").value,provider:"auto",label:document.querySelector("#model-label").value,mode,budget_usd:["capped","ask_paid"].includes(mode) ? Number(document.querySelector("#model-budget").value) : 0,call_limit:Number(document.querySelector("#model-call-limit").value),token_limit:Number(document.querySelector("#model-token-limit").value),groq_confirmed:document.querySelector("#model-groq-confirmed").checked,
       endpoint:setupEndpoint || (connectionMethod === "endpoint" ? document.querySelector("#model-endpoint").value : ""),command:connectionMethod === "cli" ? document.querySelector("#model-command").value : "",environment:connectionMethod === "cli" ? document.querySelector("#model-environment").value : "",
       environment_values:setupValues,endpoint_consent:Boolean(endpointConsent && endpointConsent === (setupState?.endpoint || document.querySelector("#model-endpoint").value)),billing_guard_confirmed:billingConsent,
       input_price:document.querySelector("#setup-input-price")?.value ? Number(document.querySelector("#setup-input-price").value) : null,output_price:document.querySelector("#setup-output-price")?.value ? Number(document.querySelector("#setup-output-price").value) : null};
@@ -124,7 +131,7 @@ document.querySelector("#model-connection").addEventListener("submit",async even
   }catch(error){modelMessage.textContent=error.message;}finally{button.disabled=false;}
 });
 document.querySelector("#helper-connect").addEventListener("click",async()=>{const button=document.querySelector("#helper-connect");button.disabled=true;try{await call("setup-helper-connect",{body:{api_key:document.querySelector("#helper-key").value,groq_confirmed:document.querySelector("#helper-free").checked,activate:false}});document.querySelector("#helper-key").value="";document.querySelector("#helper-status").textContent="Your Groq setup assistant is connected. The coding model is unchanged.";}catch(error){document.querySelector("#helper-status").textContent=error.message;}finally{button.disabled=false;}});
-document.querySelector("#setup-help").addEventListener("click",async()=>{const button=document.querySelector("#setup-help");button.disabled=true;try{const result=await call("setup-helper-analyze",{body:{command:document.querySelector("#model-command").value,endpoint:document.querySelector("#model-endpoint").value}});document.querySelector("#setup-help-result").textContent=[result.summary || result.message,...(result.steps || [])].filter(Boolean).join("\n");}catch(error){document.querySelector("#setup-help-result").textContent=error.message;}finally{button.disabled=false;}});
+document.querySelector("#setup-help").addEventListener("click",async()=>{const button=document.querySelector("#setup-help");button.disabled=true;try{const result=await call("setup-helper-analyze",{body:{use_connected_model:document.querySelector("#setup-help-source").value === "connected",command:document.querySelector("#model-command").value,endpoint:document.querySelector("#model-endpoint").value}});document.querySelector("#setup-help-result").textContent=[result.summary || result.message,...(result.steps || [])].filter(Boolean).join("\n");}catch(error){document.querySelector("#setup-help-result").textContent=error.message;}finally{button.disabled=false;}});
 setInterval(async()=>{
   if(setupState?.needs !== "local_runtime" || localSetupChecking)return;
   localSetupChecking=true;

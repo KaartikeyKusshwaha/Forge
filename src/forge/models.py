@@ -149,22 +149,20 @@ def discover(key, provider="auto", mode="free_only", groq_confirmed=False):
             if check.status_code != 200:
                 raise PolicyError("OpenRouter rejected the API key. Check its permissions and expiry.")
         else:
-            if not groq_confirmed or mode != "free_only":
+            if mode == "free_only" and not groq_confirmed:
                 raise PolicyError(
-                    "Groq profiles require confirmation of the account's Free plan. Paid Groq use is not supported."
+                    "Free usage selected. Confirm this Groq account has no paid billing enabled."
                 )
         response = httpx.get(endpoint + "/models", headers=headers, timeout=20)
         response.raise_for_status()
         models = []
         for item in response.json()["data"]:
             if provider == "groq-free":
-                if item["id"] not in {
-                    "qwen/qwen3.8-27b",
-                    "openai/gpt-oss-120b",
-                    "openai/gpt-oss-20b",
-                } or not item.get("active", True):
+                if not item.get("active", True) or any(
+                    t in item["id"].lower() for t in ("whisper", "tts", "speech", "guard", "embed")
+                ):
                     continue
-                prices = {"prompt": "0", "completion": "0"}
+                prices = {"prompt": "0", "completion": "0"} if mode == "free_only" else {}
                 parameters = ["response_format"]
             else:
                 prices = item.get("pricing", {})
@@ -176,11 +174,11 @@ def discover(key, provider="auto", mode="free_only", groq_confirmed=False):
                 rates = {k: float(v) for k, v in prices.items()}
             except (ValueError, TypeError):
                 continue  # Unbounded/dynamic pricing cannot be authorized here.
-            if not {"prompt", "completion"}.issubset(rates) or any(
-                not math.isfinite(v) or v < 0 for v in rates.values()
-            ):
+            if mode not in {"limited", "unlimited"} and not {"prompt", "completion"}.issubset(rates):
                 continue
-            free = all(v == 0 for v in rates.values())
+            if any(not math.isfinite(v) or v < 0 for v in rates.values()):
+                continue
+            free = bool(rates) and all(v == 0 for v in rates.values())
             if provider == "openrouter-free" and free and not item["id"].endswith(":free"):
                 continue
             if mode == "free_only" and not free:
@@ -225,7 +223,8 @@ class ModelVault:
         with self.connect() as db:
             db.executescript("""CREATE TABLE IF NOT EXISTS profiles(id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS settings(name TEXT PRIMARY KEY,value TEXT);
-                CREATE TABLE IF NOT EXISTS spend(id TEXT PRIMARY KEY,profile TEXT,run_id TEXT,role TEXT,amount REAL,status TEXT,created REAL);""")
+                CREATE TABLE IF NOT EXISTS spend(id TEXT PRIMARY KEY,profile TEXT,run_id TEXT,role TEXT,amount REAL,status TEXT,created REAL);
+                CREATE TABLE IF NOT EXISTS usage_calls(id TEXT PRIMARY KEY,profile TEXT,tokens INTEGER,created REAL);""")
         if os.name != "nt":
             self.path.chmod(0o600)
 
@@ -371,7 +370,33 @@ class ModelVault:
             db.execute("DELETE FROM profiles WHERE id=?", (pid,))
             db.execute("DELETE FROM settings WHERE name='setup_helper' AND value=?", (pid,))
 
+    def reserve_usage(self, tokens):
+        """Atomic lifetime limits shared by chat, setup and coding on this profile."""
+        pid = self.config.model_profile_id
+        if not pid or self.config.model_usage_mode != "limited":
+            return None
+        record = self.read(pid)
+        uid = uuid.uuid4().hex
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            calls, used = db.execute(
+                "SELECT COUNT(*),COALESCE(SUM(tokens),0) FROM usage_calls WHERE profile=?", (pid,)
+            ).fetchone()
+            if calls >= record.get("call_limit", 100) or used + tokens > record.get("token_limit", 1000000):
+                raise PolicyError(
+                    "This profile's API call or token limit is reached. Increase its limits in Connection settings."
+                )
+            db.execute("INSERT INTO usage_calls VALUES(?,?,?,?)", (uid, pid, tokens, time.time()))
+        return uid
+
+    def settle_usage(self, uid, tokens):
+        if uid and isinstance(tokens, int) and tokens >= 0:
+            with self.connect() as db:
+                db.execute("UPDATE usage_calls SET tokens=? WHERE id=?", (tokens, uid))
+
     def reserve(self, amount, role, run_id, cancelled):
+        if self.config.model_usage_mode in {"unlimited", "limited"}:
+            return None
         if not amount:
             return None
         pid = self.config.model_profile_id

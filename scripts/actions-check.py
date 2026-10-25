@@ -17,6 +17,9 @@ import xml.etree.ElementTree as ET
 from sandbox_dependencies import python_requirements
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from forge.environment import environment_plan
+
 request_id = os.environ.pop("FORGE_REQUEST_ID")
 profile = os.environ.pop("FORGE_PROFILE")
 packed = os.environ.pop("FORGE_SNAPSHOT")
@@ -82,7 +85,7 @@ with disposable_source() as directory:
             "--property=WorkingDirectory=" + directory,
             "--property=ReadWritePaths=" + " ".join(map(str, writable)),
             "--property=InaccessiblePaths=/home /root /run/docker.sock",
-            "--setenv=HOME=/nonexistent", "--setenv=TMPDIR=" + str(scratch), "--setenv=PYTHONDONTWRITEBYTECODE=1",
+            "--setenv=HOME=" + str(scratch), "--setenv=CI=1", "--setenv=NODE_ENV=test", "--setenv=COREPACK_ENABLE_DOWNLOAD_PROMPT=0", "--setenv=COREPACK_HOME=" + str(work / ".corepack"), "--setenv=YARN_ENABLE_SCRIPTS=false", "--setenv=NPM_CONFIG_IGNORE_SCRIPTS=true", "--setenv=PLAYWRIGHT_BROWSERS_PATH=" + str(work / ".forge-browsers"), "--setenv=TMPDIR=" + str(scratch), "--setenv=PYTHONDONTWRITEBYTECODE=1",
             "--setenv=PIP_CONFIG_FILE=/dev/null", *(["--setenv=PIP_NO_INDEX=1"] if offline else []), "--", *command]
         try:
             with tempfile.TemporaryFile() as log:
@@ -93,7 +96,8 @@ with disposable_source() as directory:
             subprocess.run(["sudo", "systemctl", "kill", "forge-" + request_id + "-" + stage], capture_output=True)
             return 124, "Execution time limit exceeded."
 
-    setup = {"status": "not-required", "output": "", "requirements": [], "wheels": []}
+    plan = environment_plan(files)
+    setup = {"plan": plan, "build": None, "status": "not-required", "output": "", "requirements": [], "wheels": []}
     environment = Path(tempfile.mkdtemp(prefix="forge-venv-", dir="/tmp"))
     wheels = Path(tempfile.mkdtemp(prefix="forge-wheels-", dir="/tmp"))
     environment.chmod(0o755)
@@ -137,20 +141,41 @@ with disposable_source() as directory:
         try:
             manifest = json.loads(files["package.json"])
             if manifest.get("dependencies") or manifest.get("devDependencies"):
-                if "package-lock.json" not in files:
-                    raise ValueError("Node dependency setup requires package-lock.json. Generate and commit a lockfile before running Forge.")
-                # No lifecycle hooks run during networked dependency retrieval.
-                # npm test and build hooks execute only in the offline test stage.
-                code, output = isolated([shutil.which("npm"), "ci", "--ignore-scripts", "--no-audit",
-                    "--no-fund", "--cache", str(work / ".npm-cache"), "--userconfig=/dev/null"],
-                    "node-dependencies", [work], "128M", offline=False)
-                setup["output"] = output
+                manager = plan["package_manager"]
+                if manager == "npm":
+                    if "package-lock.json" not in files:
+                        code, output = isolated([shutil.which("npm"), "install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund", "--cache", str(work / ".npm-cache")], "node-lock", [work], "128M", offline=False)
+                        setup["output"] += output
+                        if code: raise ValueError("Could not resolve a disposable npm lockfile.")
+                        setup["generated_lock"] = True
+                    install = [shutil.which("npm"), "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--cache", str(work / ".npm-cache"), "--userconfig=/dev/null"]
+                elif manager in {"pnpm", "yarn"} and shutil.which("corepack"):
+                    install = [shutil.which("corepack"), manager, "install", "--frozen-lockfile"]
+                    if manager == "pnpm": install.append("--ignore-scripts")
+                else:
+                    raise ValueError("Package manager unavailable: " + manager + ". Configure the trusted runner toolchain.")
+                code, output = isolated(install, "node-dependencies", [work], "128M", offline=False)
+                setup["output"] += output
                 if code:
-                    raise ValueError("Locked Node dependency installation failed.")
+                    raise ValueError("Node dependency installation failed.")
                 setup["status"] = "ready"
         except (ValueError, subprocess.SubprocessError) as exc:
             setup["status"] = "failed"
             setup["output"] += "\n" + str(exc)
+    if profile == "typescript" and setup["status"] != "failed":
+        manager = plan["package_manager"]
+        runner = [shutil.which("npm")] if manager == "npm" else [shutil.which("corepack"), manager]
+        if plan["browser_tests"]:
+            browser_cli = next((p for p in [work / "node_modules/playwright/cli.js", work / "node_modules/@playwright/test/cli.js"] if p.exists()), None)
+            if browser_cli:
+                code, output = isolated([shutil.which("node"), str(browser_cli), "install", "chromium"], "browsers", [work], "512M", offline=False)
+                setup["output"] += "\nBROWSER SETUP\n" + output
+                if code: setup["status"] = "failed"
+        if plan["build"] and setup["status"] != "failed":
+            code, output = isolated([*runner, "run", "build"], "build", [work], "128M")
+            setup["build"] = {"exit_code": code, "output": output}
+            setup["output"] += "\nOFFLINE BUILD\n" + output
+            if code: setup["status"] = "failed"
     # A root-owned, read-only systemd service enforces the execution boundary.
     # The target never receives Actions credentials, model keys, or source-control credentials.
     if profile == "python":
@@ -159,7 +184,7 @@ with disposable_source() as directory:
         tests = sorted(str(p.relative_to(work)) for p in work.rglob("*") if p.name.endswith((".test.ts", ".test.js")))
         command = [shutil.which("node"), "--experimental-strip-types", "--test", *tests]
         if "package.json" in files and json.loads(files["package.json"]).get("scripts", {}).get("test"):
-            command = [shutil.which("npm"), "test"]
+            command = [shutil.which("npm"), "test"] if plan["package_manager"] == "npm" else [shutil.which("corepack"), plan["package_manager"], "test"]
         elif not tests:
             command = [shutil.which("node"), "-e", "console.error('No supported tests');process.exit(1)"]
     if setup["status"] == "failed":

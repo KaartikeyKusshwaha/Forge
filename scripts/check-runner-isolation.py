@@ -37,13 +37,20 @@ project_files = {
     "test_package.py": "import fixture_package,packaging\ndef test_installed_package(): assert fixture_package.VALUE == 42\n",
 }
 node_project_files = {'package.json': '{"name": "forge-node-fixture", "version": "1.0.0", "scripts": {"preinstall": "node -e \\"require(\'fs\').writeFileSync(\'unexpected-hook\',\'bad\')\\"", "test": "node --test"}, "dependencies": {"is-number": "7.0.0"}}', 'package-lock.json': '{"name": "forge-node-fixture", "version": "1.0.0", "lockfileVersion": 3, "requires": true, "packages": {"": {"name": "forge-node-fixture", "version": "1.0.0", "dependencies": {"is-number": "7.0.0"}}, "node_modules/is-number": {"version": "7.0.0", "resolved": "https://registry.npmjs.org/is-number/-/is-number-7.0.0.tgz", "integrity": "sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng=="}}}', 'dependencies.test.js': "const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');test('dependencies installed without install hooks',()=>{assert.equal(process.getuid(),65534);assert.equal(process.env.FORGE_LLM_API_KEY,undefined);assert.equal(require('is-number')(42),true);assert.equal(fs.existsSync('unexpected-hook'),false);});"}
+node_build_files = {
+    "package.json": json.dumps({"name":"forge-build-browser-fixture","version":"1.0.0",
+        "scripts":{"build":"node -e \"require('fs').writeFileSync('built.txt','ready')\"", "test":"node --test"},
+        "devDependencies":{"playwright":"1.62.1"}}),
+    "browser.test.js": "const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const {chromium}=require('playwright');test('offline build and headless browser',async()=>{assert.equal(fs.readFileSync('built.txt','utf8'),'ready');assert.equal(process.getuid(),65534);const browser=await chromium.launch({headless:true,args:['--no-sandbox']});try{const page=await browser.newPage();await page.setContent('<button>Works</button>');assert.equal(await page.locator('button').textContent(),'Works');}finally{await browser.close();}});",
+}
 # Seed fake secrets in the controller so absence tests prove non-inheritance.
 os.environ.update(GROQ_API_KEY="fixture-not-a-secret", FORGE_LLM_API_KEY="fixture-not-a-secret")
 reports = []
 for profile, files, expected in [("python", {"test_isolation.py": python_tests}, 6),
                                  ("python", project_files, 1),
                                  ("typescript", {"isolation.test.ts": node_tests}, 1),
-                                 ("typescript", node_project_files, 1)]:
+                                 ("typescript", node_project_files, 1),
+                                 ("typescript", node_build_files, 1)]:
     raw = json.dumps(files, sort_keys=True, separators=(",", ":")).encode()
     os.environ.update(FORGE_REQUEST_ID=uuid.uuid4().hex, FORGE_PROFILE=profile,
         FORGE_SNAPSHOT=base64.b64encode(gzip.compress(raw)).decode(),

@@ -131,7 +131,9 @@ class Worker:
             context["follow_up_policy"] = (
                 "This is a new proposal on the current upstream base. Do not assume an unmerged previous PR is present. Explain dependencies on prior changes to the owner."
             )
-        save(context=context, title=context["title"], model=model)
+        from forge.environment import environment_plan
+
+        save(context=context, title=context["title"], model=model, environment_plan=environment_plan(files))
         profile = (
             "typescript"
             if any(p.endswith((".ts", ".js")) for p in files) and not any(p.endswith(".py") for p in files)

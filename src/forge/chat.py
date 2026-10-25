@@ -74,7 +74,7 @@ def reply(store, config, run_id, request_key):
     context = json.loads(encoded)
     answer, error = "", ""
     try:
-        result = Provider(selected, usage, save_usage, lambda: False).ask(
+        result = Provider(selected, usage, save_usage, lambda: store.get(run_id).get("ended", False)).ask(
             "conversation",
             "Answer the owner's latest message as a helpful engineering collaborator. Return JSON with "
             "reply:string. Explain, clarify requirements, discuss improvements and diagnose supplied evidence. "

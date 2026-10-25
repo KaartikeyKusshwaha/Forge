@@ -64,7 +64,7 @@ test("nonloopback settings and unpaired requests are rejected", async () => {
 
 test("GitHub pages cannot manage provider keys or grant API spending", async () => {
   const s=service({token:"fixture-token",baseUrl:"http://127.0.0.1:8787"});
-  for(const action of ["model-connect","model-profiles","model-delete","model-decide","setup-helper-connect","setup-helper-analyze","device-setup-action"]){
+  for(const action of ["model-policy","model-connect","model-profiles","model-delete","model-decide","setup-helper-connect","setup-helper-analyze","device-setup-action"]){
     assert.equal((await s.send(action,{id:"a".repeat(32),body:{api_key:"fixture-provider-secret"},approve:true})).ok,false);
   }
   assert.equal(s.requests.length,0);

@@ -25,6 +25,24 @@ PREFIXES = {
 }
 
 
+# Variable names identify a provider without sending credentials to guesses.
+# Endpoint/code examples remain the fallback for ambiguous keys.
+ENV_ENDPOINTS = {
+    "OPENROUTER_API_KEY": "https://openrouter.ai/api/v1",
+    "GROQ_API_KEY": "https://api.groq.com/openai/v1",
+    "OPENAI_API_KEY": "https://api.openai.com/v1",
+    "ANTHROPIC_API_KEY": "https://api.anthropic.com/v1",
+    "GEMINI_API_KEY": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "GOOGLE_API_KEY": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "DEEPSEEK_API_KEY": "https://api.deepseek.com",
+    "XAI_API_KEY": "https://api.x.ai/v1",
+    "MISTRAL_API_KEY": "https://api.mistral.ai/v1",
+    "ZAI_API_KEY": "https://api.z.ai/api/paas/v4",
+    "NVIDIA_API_KEY": "https://integrate.api.nvidia.com/v1",
+    "CEREBRAS_API_KEY": "https://api.cerebras.ai/v1",
+}
+
+
 def endpoint_base(value):
     url = urlparse(value.strip().rstrip("/"))
     if url.username or url.password or url.fragment or url.query or url.scheme not in {"https", "http"}:
@@ -39,7 +57,7 @@ def endpoint_base(value):
         path = re.sub(r"/(chat/completions|messages|models|responses)$", "", path)
         if local and url.port == 11434 and path in {"", "/api/chat", "/api/generate"}:
             path = "/v1"
-        elif not path:
+        elif not path and url.hostname != "api.deepseek.com":
             path = "/v1"
     return f"{url.scheme}://{url.netloc}{path}", local
 
@@ -144,6 +162,11 @@ def parse_example(key="", endpoint="", code="", environment="", supplied=None):
                 "model": model,
                 "message": f"The example references {', '.join(envs)}. Enter the missing key below and approve saving it for this Forge integration.",
             }
+    if not endpoint:
+        names = set(envs) | set(re.findall(r"\b[A-Z][A-Z0-9_]*(?:API_KEY|TOKEN)\b", code))
+        matches = {ENV_ENDPOINTS[n] for n in names if n in ENV_ENDPOINTS}
+        if len(matches) == 1:
+            endpoint = matches.pop()
     if not endpoint:
         endpoint = next((base for prefix, base in PREFIXES.items() if key.startswith(prefix)), "")
     if not endpoint:
@@ -384,14 +407,8 @@ def prepare_connection(body, config, vault):
                 "message": f"Forge detected {urlparse(endpoint).hostname}. Approve sending your key only to this endpoint to verify access and discover models.",
             }
         }
-    if provider == "groq-free" and not body.groq_confirmed:
-        return {
-            "setup": {
-                "needs": "free_plan",
-                "endpoint": endpoint,
-                "message": "Groq's model list does not reveal your billing plan. Confirm this account uses the Free plan before continuing.",
-            }
-        }
+    if provider == "groq-free" and body.mode == "free_only":
+        body.groq_confirmed = True
     if local:
         from forge.models import discover_local
 
@@ -413,15 +430,9 @@ def prepare_connection(body, config, vault):
         if result.get("needs"):
             return {"setup": result}
         if body.mode == "free_only":
-            if not body.billing_guard_confirmed:
-                return {
-                    "setup": {
-                        "needs": "billing_guard",
-                        "endpoint": endpoint,
-                        "message": "This provider does not expose verifiable zero-cost pricing. Confirm that its account/key is configured with no paid usage or auto-recharge and stops at the free allowance. Forge cannot enforce billing behind this endpoint.",
-                    }
-                }
             rates = {"prompt": 0, "completion": 0}
+        elif body.mode in {"limited", "unlimited"}:
+            rates = {}
         else:
             if not body.billing_guard_confirmed or body.input_price is None or body.output_price is None:
                 return {
@@ -445,6 +456,8 @@ def prepare_connection(body, config, vault):
         )
     record = vault.read(pid)
     record["environment_names"] = parsed["environment_names"]
+    record["call_limit"] = body.call_limit
+    record["token_limit"] = body.token_limit
     if parsed["model"]:
         if parsed["model"] in {m["id"] for m in record["models"]}:
             record["model"] = parsed["model"]
@@ -455,10 +468,10 @@ def prepare_connection(body, config, vault):
     return vault.list()
 
 
-def assist(config, code):
+def assist(config, code, use_connected=False):
     from forge.llm import Provider
 
-    helper = groq_helper(config)
+    helper = config.model_copy(deep=True) if use_connected and config.llm_ready else groq_helper(config)
     if not helper:
         return {
             "message": "Configure your own Groq Free setup assistant below for help interpreting examples."

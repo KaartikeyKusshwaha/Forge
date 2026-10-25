@@ -147,6 +147,41 @@ class Store:
                 q = q.where(Run.created < before)
             return [self.serialize(r) for r in s.scalars(q)]
 
+    def session_action(self, run_id, action):
+        if action == "delete":
+            with Session(self.engine) as s, s.begin():
+                row = s.get(Run, run_id)
+                if row is None:
+                    raise KeyError(run_id)
+                if row.status not in TERMINAL or row.lease_until > time.time():
+                    raise Conflict("End this session and wait for execution to stop before deleting it.")
+                if any(t.get("status") == "pending" for t in row.data.get("chat", [])):
+                    raise Conflict("Wait for the current reply before deleting this session.")
+                for event in s.scalars(select(Event).where(Event.run_id == run_id)):
+                    s.delete(event)
+                s.delete(row)
+            return {"deleted": True, "id": run_id}
+
+        def change(row, data):
+            if row.status == "publishing":
+                raise Conflict("Publication is in progress. Wait for it to finish.")
+            if action == "end":
+                data["ended"] = True
+                return {"cancel": True, "status": "cancelled"}
+            if any(t.get("status") == "pending" for t in data.get("chat", [])):
+                raise Conflict("Wait for the current reply before forgetting conversation context.")
+            data["chat"] = []
+            data["forgotten_at"] = time.time()
+
+        return self.mutate(
+            run_id,
+            change,
+            "session_" + action,
+            "Session ended; published GitHub history is unchanged."
+            if action == "end"
+            else "Conversation context forgotten. Run and PR records are preserved.",
+        )
+
     def mutate(self, run_id: str, fn: Callable, kind: str = "", message: str = "", owner: str = "") -> dict:
         for _ in range(8):
             with Session(self.engine) as s, s.begin():

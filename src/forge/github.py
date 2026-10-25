@@ -74,7 +74,7 @@ class GitHub:
                     )
         issues = self.request("GET", f"/repos/{repo}/issues", token, params={"state": "open", "per_page": 30})
         limits = [
-            "Execution supports Python/Node test profiles without automatic dependency installation.",
+            "Checks prepare Python/Node dependencies in a disposable VM. Builds and tests run offline. External services and other toolchains require runner profiles.",
             "The VM fetches the pinned public source. Proposed changes must fit the 58 KB compressed message limit; source archives are capped at 50 MB.",
         ]
         if "blender" in repo.lower():

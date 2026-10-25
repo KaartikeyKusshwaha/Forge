@@ -19,6 +19,7 @@ function allowedRequest(message) {
     case "models": return ["GET", "/api/models"];
     case "model-profiles": return ["GET", "/api/model-profiles"];
     case "model-connect": return ["POST", "/api/model-profiles", message.body];
+    case "model-policy": if (/^[a-f0-9]{32}$/.test(message.id || "")) return ["POST", "/api/model-profiles/" + message.id + "/policy", message.body]; break;
     case "model-activate": if (/^[a-f0-9]{32}$/.test(message.id || "")) return ["POST", "/api/model-profiles/" + message.id + "/activate", {model:message.model || null}]; break;
     case "model-delete": if (/^[a-f0-9]{32}$/.test(message.id || "")) return ["DELETE", "/api/model-profiles/" + message.id]; break;
     case "model-spending": return ["GET", "/api/model-spending"];
@@ -45,6 +46,9 @@ function allowedRequest(message) {
     }
     case "run": if (runPath) return ["GET", runPath]; break;
     case "pull-history": if (runPath) return ["GET", runPath + "/pull-history"]; break;
+    case "session":
+      if(runPath && ["end","delete","forget"].includes(message.body?.action)) return ["POST",runPath+"/session",{action:message.body.action}];
+      break;
     case "chat":
       if (runPath && typeof message.body?.message === "string" && typeof message.body?.request_key === "string")
         return ["POST", runPath + "/chat", {message:message.body.message, request_key:message.body.request_key}];
@@ -78,6 +82,9 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message.action.startsWith("model-") && !trustedOptions) throw new Error("Manage provider keys and API spending from extension settings only.");
     if ((message.action.startsWith("setup-helper-") || message.action.startsWith("device-setup-")) && !trustedOptions) throw new Error("Local setup actions are restricted to extension settings.");
     if (message.action === "options") {
+      if(chrome.sidePanel && sender.tab?.id) {
+        try {await chrome.sidePanel.open({tabId:sender.tab.id}); return {opened:true};} catch {}
+      }
       await chrome.runtime.openOptionsPage();
       return {opened: true};
     }

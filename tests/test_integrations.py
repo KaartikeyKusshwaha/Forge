@@ -112,8 +112,7 @@ def test_connection_setup_requires_destination_and_billing_consent(monkeypatch, 
     assert first["setup"]["needs"] == "endpoint_consent" and not requests
     body["endpoint_consent"] = True
     second = client.post("/api/model-profiles", json=body).json()
-    assert second["setup"]["needs"] == "billing_guard"
-    body["billing_guard_confirmed"] = True
+    assert second["profiles"][0]["mode"] == "free_only"
     response = client.post("/api/model-profiles", json=body)
     assert response.status_code == 200, response.text
     assert config.llm_provider == "compatible" and config.llm_model == "test-coder"

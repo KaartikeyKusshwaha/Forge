@@ -43,6 +43,10 @@ class Revision(BaseModel):
     request_key: str = Field(min_length=12, max_length=100)
 
 
+class SessionAction(BaseModel):
+    action: Literal["end", "delete", "forget"]
+
+
 class ChatMessage(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     request_key: str = Field(min_length=12, max_length=100)
@@ -59,7 +63,10 @@ class ModelConnection(BaseModel):
     provider: Literal["auto", "openrouter-free", "groq-free"] = (
         "auto"  # Legacy clients only; UI has no picker.
     )
-    mode: Literal["free_only", "ask_paid", "capped"] = "free_only"
+    mode: Literal["free_only", "limited", "unlimited", "ask_paid", "capped"] = "free_only"
+    call_limit: int = Field(default=100, ge=1, le=1000000)
+    token_limit: int = Field(default=1000000, ge=1000, le=1000000000)
+    use_connected_model: bool = False
     budget_usd: float = Field(default=0, ge=0, le=1000, allow_inf_nan=False)
     groq_confirmed: bool = False
     activate: bool = True
@@ -71,6 +78,12 @@ class ModelConnection(BaseModel):
     billing_guard_confirmed: bool = False
     input_price: float | None = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
     output_price: float | None = Field(default=None, ge=0, le=10000, allow_inf_nan=False)
+
+
+class UsagePolicy(BaseModel):
+    mode: Literal["free_only", "limited", "unlimited"]
+    call_limit: int = Field(default=100, ge=1, le=1000000)
+    token_limit: int = Field(default=1000000, ge=1000, le=1000000000)
 
 
 class ModelActivation(BaseModel):
@@ -189,7 +202,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
 
         if body.activate and db.has_active_runs():
             raise Conflict("Wait for active runs to finish before changing the model connection.")
-        if body.mode != "free_only" and body.budget_usd <= 0:
+        if body.mode in {"ask_paid", "capped"} and body.budget_usd <= 0:
             raise HTTPException(422, "Set a positive lifetime spending cap for paid usage.")
         return prepare_connection(body, config, vault)
 
@@ -220,7 +233,24 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     def setup_assistant_analyze(body: ModelConnection):
         from forge.integrations import assist
 
-        return assist(config, body.command or body.endpoint)
+        return assist(config, body.command or body.endpoint, use_connected=body.use_connected_model)
+
+    @app.post("/api/model-profiles/{profile_id}/policy", dependencies=[Depends(authenticated)])
+    @model_serialized
+    def update_policy(profile_id: str, body: UsagePolicy):
+        if db.has_active_runs():
+            raise Conflict("Wait for execution to stop before changing usage permissions.")
+        record = vault.read(profile_id)
+        record.update(mode=body.mode, call_limit=body.call_limit, token_limit=body.token_limit)
+        if record["provider"] == "groq-free" and body.mode == "free_only":
+            record["groq_confirmed"] = True
+        if record.get("compatible") and body.mode == "free_only":
+            record["rates"] = {"prompt": 0, "completion": 0}
+        with vault.connect() as connection:
+            connection.execute("UPDATE profiles SET data=? WHERE id=?", (json.dumps(record), profile_id))
+        if any(p["id"] == profile_id and p["active"] for p in vault.list()["profiles"]):
+            vault.apply(profile_id, record)
+        return vault.list()
 
     @app.post("/api/model-profiles/{profile_id}/activate", dependencies=[Depends(authenticated)])
     @model_serialized
@@ -265,11 +295,18 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
             status="needs_input",
         )
 
+    @app.post("/api/runs/{run_id}/session", dependencies=[Depends(authenticated)])
+    def manage_session(run_id: str, body: SessionAction):
+        get_run(run_id)
+        return db.session_action(run_id, body.action)
+
     @app.post("/api/runs/{run_id}/chat", dependencies=[Depends(authenticated)])
     @model_serialized
     def chat_run(run_id: str, body: ChatMessage):
         from forge.chat import prepare, reply
 
+        if get_run(run_id).get("ended"):
+            raise Conflict("This session has ended. Start a new conversation to continue.")
         if get_run(run_id)["mode"] == "demo":
             raise HTTPException(
                 409, "Open Talk to Forge on a repository for live chat. The demo makes no model calls."
@@ -371,6 +408,17 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     @app.get("/api/repositories", dependencies=[Depends(authenticated)])
     def repositories():
         return {"repositories": GitHub(config).repositories()}
+
+    @app.get("/api/runs/{run_id}/environment", dependencies=[Depends(authenticated)])
+    def sandbox_environment(run_id: str):
+        run = get_run(run_id)
+        return {
+            "plan": run.get("environment_plan"),
+            "checks": [
+                {"phase": c.get("phase"), "setup": c.get("setup"), "run_url": c.get("run_url")}
+                for c in run.get("checks", [])
+            ],
+        }
 
     @app.post("/api/repository/analyze", dependencies=[Depends(authenticated)])
     def analyze_repository(body: RepositoryRequest):

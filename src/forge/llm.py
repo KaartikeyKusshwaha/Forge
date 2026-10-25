@@ -115,14 +115,19 @@ def verify_free(config: Settings) -> dict:
         )
         if response.status_code != 200:
             raise PolicyError("Could not verify the available Groq models. Check the configured key.")
-        available = {m["id"] for m in response.json()["data"] if m.get("active", True)}
+        available = {
+            m["id"]
+            for m in response.json()["data"]
+            if m.get("active", True)
+            and not any(t in m["id"].lower() for t in ("whisper", "tts", "speech", "guard", "embed"))
+        }
         preference = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
         model = (
-            next((m for m in preference if m in available), None)
+            next((m for m in preference if m in available), next(iter(sorted(available)), None))
             if config.llm_model == "auto"
             else config.llm_model
         )
-        if model not in available or model not in preference:
+        if model not in available:
             raise PolicyError("Select an available supported text model on the confirmed Groq Free plan.")
         return {"id": model, "parameters": ["response_format"], "free_plan_confirmed": True}
     if config.llm_provider == "local":
@@ -250,7 +255,10 @@ class Provider:
             body["tool_choice"] = {"type": "function", "function": {"name": "forge_result"}}
         elif "response_format" in parameters and not getattr(self, "_disable_output_controls", False):
             body["response_format"] = {"type": "json_object"}
-        if self.config.llm_provider == "openrouter-free":
+        if self.config.llm_provider == "openrouter-free" and self.config.model_usage_mode not in {
+            "unlimited",
+            "limited",
+        }:
             prices = selected.get("prices", {})
             rates = {k: prices.get(k, 0) for k in ("prompt", "completion")}
             body["provider"] = {"max_price": {k: v * 1_000_000 for k, v in rates.items()}}
@@ -281,6 +289,7 @@ class Provider:
                 amount = input_bound * prices.get("prompt", 0) + self.config.max_output_tokens * prices.get(
                     "completion", 0
                 )
+                usage_id = vault.reserve_usage(reservation)
                 self.usage["awaiting_spend_permission"] = bool(
                     amount and self.config.model_usage_mode == "ask_paid"
                 )
@@ -330,6 +339,10 @@ class Provider:
                     )
                 if vault:
                     try:
+                        reported_tokens = response.json().get("usage", {}).get("total_tokens")
+                        if reported_tokens is None and response.status_code >= 400:
+                            reported_tokens = 0
+                        vault.settle_usage(usage_id, reported_tokens)
                         vault.settle(reservation_id, response.json().get("usage", {}).get("cost"))
                     except ValueError:
                         pass  # Keep the full reservation when the provider omits usable cost evidence.
