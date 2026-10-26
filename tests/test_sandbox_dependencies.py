@@ -36,3 +36,24 @@ def test_unsafe_dependency_sources_are_rejected(declaration):
 def test_dynamic_dependencies_fail_before_executing_build_code():
     with pytest.raises(ValueError, match="Dynamic"):
         module.python_requirements({"pyproject.toml": '[project]\nname="x"\ndynamic=["dependencies"]'})
+
+
+def test_dependency_groups_expand_includes_and_setup_cfg_is_parsed_without_execution():
+    requirements, install = module.python_requirements(
+        {
+            "pyproject.toml": '[dependency-groups]\ncommon=["packaging"]\ntest=[{include-group="common"},"pytest-asyncio"]',
+            "setup.cfg": "[metadata]\nname=fixture\n[options]\ninstall_requires=\n httpx>=0.27\n"
+            "[options.extras_require]\ntest=\n anyio>=4\n",
+        }
+    )
+    assert install
+    assert {"packaging", "pytest-asyncio", "httpx>=0.27", "anyio>=4"} <= set(requirements)
+
+
+def test_cyclic_dependency_groups_stop_before_package_retrieval():
+    with pytest.raises(ValueError, match="cycle"):
+        module.python_requirements(
+            {
+                "pyproject.toml": '[dependency-groups]\ntest=[{include-group="dev"}]\ndev=[{include-group="test"}]'
+            }
+        )

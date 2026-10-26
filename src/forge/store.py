@@ -155,7 +155,10 @@ class Store:
                     raise KeyError(run_id)
                 if row.status not in TERMINAL or row.lease_until > time.time():
                     raise Conflict("End this session and wait for execution to stop before deleting it.")
-                if any(t.get("status") == "pending" for t in row.data.get("chat", [])):
+                if any(
+                    t.get("status") == "pending" and time.time() - t.get("created", time.time()) < 900
+                    for t in row.data.get("chat", [])
+                ):
                     raise Conflict("Wait for the current reply before deleting this session.")
                 for event in s.scalars(select(Event).where(Event.run_id == run_id)):
                     s.delete(event)
@@ -168,7 +171,10 @@ class Store:
             if action == "end":
                 data["ended"] = True
                 return {"cancel": True, "status": "cancelled"}
-            if any(t.get("status") == "pending" for t in data.get("chat", [])):
+            if any(
+                t.get("status") == "pending" and time.time() - t.get("created", time.time()) < 900
+                for t in data.get("chat", [])
+            ):
                 raise Conflict("Wait for the current reply before forgetting conversation context.")
             data["chat"] = []
             data["forgotten_at"] = time.time()

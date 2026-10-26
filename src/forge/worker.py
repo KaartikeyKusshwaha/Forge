@@ -5,6 +5,7 @@ import uuid
 from forge.actions import ActionsSandbox
 from forge.config import Settings
 from forge.contracts import Changes, Edit, Plan, Review
+from forge.evidence import check_evidence
 from forge.github import GitHub, GitHubError, demo_context
 from forge.index import retrieve
 from forge.llm import Provider, verify_free
@@ -307,7 +308,7 @@ class Worker:
                             "issue": context,
                             "plan": plan.model_dump(),
                             "changes": aggregate,
-                            "checks": [{**c, "output": c["output"][:8000]} for c in checks],
+                            "checks": [check_evidence(c) for c in checks],
                         },
                     )
                 )

@@ -147,3 +147,20 @@ def test_limited_policy_is_enforced_by_the_real_provider_call_path(setup, monkey
             with pytest.raises(PolicyError, match="limit"):
                 p.ask("setup-helper", "Help", {})
     assert len(sent) == 1
+
+
+def test_interrupted_reply_does_not_permanently_block_forget_or_delete(setup):
+    import time
+
+    config, store, client = setup
+    run = new_session(client)
+    store.mutate(
+        run["id"],
+        lambda r, d: d.update(chat=[{"status": "pending", "message": "old", "created": time.time() - 1000}]),
+    )
+    assert client.post(f"/api/runs/{run['id']}/session", json={"action": "forget"}).status_code == 200
+    store.mutate(
+        run["id"],
+        lambda r, d: d.update(chat=[{"status": "pending", "message": "old", "created": time.time() - 1000}]),
+    )
+    assert client.post(f"/api/runs/{run['id']}/session", json={"action": "delete"}).status_code == 200

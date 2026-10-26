@@ -209,3 +209,35 @@ def test_provider_specific_token_parameter_is_corrected_without_raising_limit(mo
     assert "max_tokens" in requests[0]["body"]
     assert "max_tokens" not in requests[1]["body"]
     assert requests[1]["body"]["max_completion_tokens"] == requests[0]["body"]["max_tokens"]
+
+
+def test_oversized_evidence_retries_without_cutting_source_or_test_results(monkeypatch):
+    context = {
+        "selected_files": {"module.py": "complete source\n" * 20},
+        "checks": [
+            {
+                "exit_code": 0,
+                "count": 5,
+                "status": "passed",
+                "setup": {"output": "dependency log" * 2000},
+                "output": "DEPENDENCY SETUP\n" + "noise" * 2000 + "\nTESTS\n5 passed",
+            }
+        ],
+    }
+    requests = transport(
+        monkeypatch,
+        [httpx.Response(413, json={"error": {"message": "Request too large"}}), completion(json.dumps(PLAN))],
+    )
+    assert provider().ask("planner", "Plan", context) == PLAN
+    retried = json.loads(requests[1]["body"]["messages"][1]["content"])
+    assert retried["selected_files"] == context["selected_files"]
+    assert retried["checks"][0]["output"] == "5 passed"
+    assert retried["checks"][0]["exit_code"] == 0
+    assert "setup" not in retried["checks"][0]
+
+
+def test_capacity_failure_does_not_truncate_complete_code(monkeypatch):
+    requests = transport(monkeypatch, [httpx.Response(413, json={"error": {"message": "too large"}})])
+    with pytest.raises(PolicyError, match="No files were truncated"):
+        provider().ask("planner", "Plan", {"selected_files": {"module.py": "complete code"}})
+    assert len(requests) == 1
