@@ -241,6 +241,7 @@ class ModelVault:
     def list(self):
         with self.connect() as db:
             active = db.execute("SELECT value FROM settings WHERE name='active'").fetchone()
+            workspace = db.execute("SELECT value FROM settings WHERE name='workspace_name'").fetchone()
             records = db.execute("SELECT id,data FROM profiles").fetchall()
             amounts = dict(
                 db.execute(
@@ -255,6 +256,7 @@ class ModelVault:
                 )
             }
         return {
+            "workspace": workspace[0] if workspace else "Your workspace",
             "profiles": [
                 {
                     k: v
@@ -268,7 +270,7 @@ class ModelVault:
                     if k != "key"
                 }
                 for pid, raw in records
-            ]
+            ],
         }
 
     def save(self, key, label, provider, mode, budget, groq_confirmed, endpoint=""):
@@ -278,8 +280,7 @@ class ModelVault:
             provider, models = discover(key, provider, mode, groq_confirmed)
         pid = uuid.uuid4().hex
         data = {
-            "label": label
-            or {"openrouter-free": "OpenRouter", "groq-free": "Groq", "local": "Local endpoint"}[provider],
+            "label": "",
             "endpoint": endpoint if provider == "local" else ENDPOINTS[provider],
             "provider": provider,
             "model": models[0]["id"],
@@ -341,7 +342,7 @@ class ModelVault:
     def save_compatible(self, key, endpoint, protocol, models, label, mode, budget, rates, environment_names):
         pid = uuid.uuid4().hex
         data = {
-            "label": label or urlparse(endpoint).hostname,
+            "label": "",
             "endpoint": endpoint,
             "provider": "compatible",
             "compatible": True,

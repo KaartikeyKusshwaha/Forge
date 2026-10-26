@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const vm = require("node:vm");
 const fs = require("node:fs");
 
-function service(values = {}) {
+function service(values = {}, response = null) {
   let listener, accessLevel;
   const data = {...values}, requests = [];
   const storage = {
@@ -16,7 +16,7 @@ function service(values = {}) {
       onMessage: {addListener(fn) {listener = fn;}}}};
   const fetch = async (url, options) => {
     requests.push({url, options});
-    return {ok: true, json: async () => ({service: "forge"})};
+    return response || {ok: true, json: async () => ({service: "forge"})};
   };
   vm.runInNewContext(fs.readFileSync("extension/background.js", "utf8"), {chrome, URL, fetch, AbortSignal});
   const send = (action, extra = {}, source = "github") => new Promise(resolve => {
@@ -26,6 +26,15 @@ function service(values = {}) {
   });
   return {send, requests, data, accessLevel};
 }
+
+test("an outdated owner token explains re-pairing instead of reporting offline", async () => {
+  const s = service({token:"old-fixture-token"}, {ok:false,status:401,json:async()=>({})});
+  const result = await s.send("status");
+  assert.equal(result.ok,false);
+  assert.match(result.error,/Forge is running/);
+  assert.match(result.error,/owner token is outdated/);
+  assert.match(result.error,/Change connection/);
+});
 
 test("background storage restricts token access and sends it only to loopback", async () => {
   const serviceWorker = service({token: "private-fixture-owner-token", baseUrl: "http://127.0.0.1:8787"});

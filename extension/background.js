@@ -120,6 +120,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       throw new Error("Forge is offline. Start the local service, then reconnect.");
     }
     if (!response.ok) {
+      if (response.status === 401) throw new Error("Forge is running, but this browser's owner token is outdated. Open Connection → Change connection, paste the current token from .forge/owner-token, then connect again.");
       const data = await response.json().catch(() => ({}));
       throw new Error(typeof data.detail === "string" ? data.detail : `Request failed (${response.status}).`);
     }

@@ -256,3 +256,9 @@ ID when prompted, or paste an official API example. Forge reads Cloudflare's nat
 model catalog, selects a text model, and calls its compatible inference endpoint.
 Credentials stay in the installation's protected model vault. Optional setup help
 can use the connected model, so a second Groq key is not required.
+
+### Starting again and reviewing work
+
+Choose **Start afresh** in the extension header to return to the current GitHub repository's issue, chat and contribution options. This clears the panel selection and draft task without deleting previous sessions or cancelling an existing backend run. Requests from another repository are no longer automatically restored.
+
+The **History** tab combines the current request timeline with earlier sessions across repositories. Select a previous request to inspect its changes, checks and conversation. The existing End, Forget conversation and Delete local record controls remain available. Creating a GitHub issue opens GitHub's issue form; a custom Forge request can also start directly from the repository page.

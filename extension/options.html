@@ -17,8 +17,8 @@
   <section id="capabilities" hidden></section>
   <section id="github-setup" hidden><button id="connect-github" type="button">Connect GitHub App <span aria-hidden="true">↗</span></button><p class="hint" style="margin:12px 0">Create and install your own App through GitHub. Its private key returns directly to the local service.</p></section>
   <section id="model-panel" hidden>
-    <h2>Models &amp; API keys</h2>
-    <p>Connect a key to discover compatible models automatically. Save multiple profiles and choose which Forge uses.</p>
+    <h2 id="workspace-name">Your workspace</h2>
+    <p>Connect keys in this workspace. Forge identifies each connection by its model and provider; no profile name is needed.</p>
     <div class="connection-modes" role="group" aria-label="Model connection method"><button type="button" data-method="key" aria-pressed="true">API key</button><button type="button" data-method="endpoint" aria-pressed="false">Endpoint</button><button type="button" data-method="cli" aria-pressed="false">CLI / environment</button></div>
     <form id="model-connection">
       <div id="endpoint-fields" hidden><label for="model-endpoint">Provider endpoint</label><input id="model-endpoint" type="url" placeholder="https://openrouter.ai/api/v1"><p class="hint">Paste a provider URL or a local model URL. Forge detects compatible API formats and asks for missing settings. Local proxies must not forward to paid services.</p></div>
@@ -30,7 +30,6 @@
       <div id="model-limit-fields" hidden><label for="model-call-limit">Maximum API calls for this profile</label><input id="model-call-limit" type="number" min="1" max="1000000" value="100"><label for="model-token-limit">Maximum tokens for this profile</label><input id="model-token-limit" type="number" min="1000" max="1000000000" value="1000000"><p class="hint">Shared across chat, setup assistance and coding. Provider charges and account quotas still apply.</p></div>
       <div id="model-budget-fields" hidden><label for="model-budget">Lifetime cap for this profile (USD)</label><input id="model-budget" type="number" min="0.01" max="1000" step="0.01" value="1"><p class="hint">Applies to Forge's model calls, not other apps using this key. No credit purchases or auto-recharge. Uncertain costs remain reserved.</p></div>
       <input id="model-groq-confirmed" type="checkbox" hidden>
-      <label for="model-label">Profile name (optional)</label><input id="model-label" maxlength="100" placeholder="My coding model">
       <button type="submit">Detect, verify &amp; connect</button>
     </form>
     <p id="model-message" role="status" aria-live="polite"></p>

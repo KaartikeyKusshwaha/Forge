@@ -89,21 +89,22 @@ document.querySelector("#model-policy").addEventListener("change", event => {
 });
 
 function profileView(data) {
+  document.querySelector("#workspace-name").textContent = data.workspace || "Your workspace";
   const list = document.querySelector("#model-profiles"); list.replaceChildren();
   for (const profile of data.profiles || []) {
     const box = document.createElement("article"); box.className="model-profile";
-    const heading = document.createElement("h3"); heading.textContent=profile.label + (profile.active ? " · Active" : ""); box.append(heading);
+    const heading = document.createElement("h3"); heading.textContent=profile.model + (profile.active ? " · Active" : ""); box.append(heading);
     const info=document.createElement("p"); info.textContent=`${profile.provider} · ${profile.mode === "unlimited" ? "No Forge usage cap" : profile.mode === "limited" ? "Call and token limits" : profile.mode === "free_only" ? "Free usage" : profile.mode}`; box.append(info);
     if(profile.mode === "limited"){const used=document.createElement("p");used.textContent=`${profile.usage?.calls || 0} / ${profile.call_limit || 100} calls · ${profile.usage?.tokens || 0} / ${profile.token_limit || 1000000} tokens`;box.append(used);}
-    const policy=document.createElement("select");policy.setAttribute("aria-label",`Usage policy for ${profile.label}`);
+    const policy=document.createElement("select");policy.setAttribute("aria-label",`Usage policy for ${profile.model}`);
     for(const [value,label] of [["free_only","Free usage"],["limited","Limited API usage"],["unlimited","Unlimited · no Forge usage cap"]]){const option=document.createElement("option");option.value=value;option.textContent=label;option.selected=profile.mode===value;policy.append(option);}box.append(policy);
-    const calls=document.createElement("input");calls.type="number";calls.min="1";calls.value=profile.call_limit || 100;calls.setAttribute("aria-label",`API call limit for ${profile.label}`);
-    const tokens=document.createElement("input");tokens.type="number";tokens.min="1000";tokens.value=profile.token_limit || 1000000;tokens.setAttribute("aria-label",`Token limit for ${profile.label}`);
+    const calls=document.createElement("input");calls.type="number";calls.min="1";calls.value=profile.call_limit || 100;calls.setAttribute("aria-label",`API call limit for ${profile.model}`);
+    const tokens=document.createElement("input");tokens.type="number";tokens.min="1000";tokens.value=profile.token_limit || 1000000;tokens.setAttribute("aria-label",`Token limit for ${profile.model}`);
     function policyFields(){calls.hidden=tokens.hidden=policy.value!=="limited";}policy.addEventListener("change",policyFields);policyFields();box.append(calls,tokens);
     const savePolicy=document.createElement("button");savePolicy.type="button";savePolicy.textContent="Save usage permissions";savePolicy.addEventListener("click",async()=>{savePolicy.disabled=true;try{profileView(await call("model-policy",{id:profile.id,body:{mode:policy.value,call_limit:Number(calls.value),token_limit:Number(tokens.value)}}));await inspect();}catch(error){modelMessage.textContent=error.message;}finally{savePolicy.disabled=false;}});box.append(savePolicy);
     if(profile.endpoint){const endpoint=document.createElement("p");endpoint.textContent=profile.endpoint;box.append(endpoint);}
     if(profile.billing_basis){const note=document.createElement("p");note.textContent=profile.billing_basis;box.append(note);}
-    const select=document.createElement("select"); select.setAttribute("aria-label",`Model for ${profile.label}`);
+    const select=document.createElement("select"); select.setAttribute("aria-label",`Model for ${profile.model}`);
     for(const model of profile.models) {const option=document.createElement("option");option.value=model.id;option.textContent=model.name + (model.free ? profile.compatible ? " · Account free allowance" : " · Free" : " · Paid");option.selected=model.id===profile.model;select.append(option);} box.append(select);
     const activate=document.createElement("button"); activate.type="button"; activate.textContent="Use this model";
     if(profile.setup_only){activate.disabled=true;activate.textContent="Setup assistance only";}
@@ -124,7 +125,7 @@ document.querySelector("#model-connection").addEventListener("submit",async even
   const button=event.target.querySelector('button[type="submit"]');button.disabled=true;modelMessage.textContent="Detecting provider and checking model access…";
   try{
     const mode=document.querySelector("#model-policy").value;
-    const body={api_key:document.querySelector("#model-key").value,provider:"auto",label:document.querySelector("#model-label").value,mode,budget_usd:["capped","ask_paid"].includes(mode) ? Number(document.querySelector("#model-budget").value) : 0,call_limit:Number(document.querySelector("#model-call-limit").value),token_limit:Number(document.querySelector("#model-token-limit").value),groq_confirmed:document.querySelector("#model-groq-confirmed").checked,
+    const body={api_key:document.querySelector("#model-key").value,provider:"auto",label:"",mode,budget_usd:["capped","ask_paid"].includes(mode) ? Number(document.querySelector("#model-budget").value) : 0,call_limit:Number(document.querySelector("#model-call-limit").value),token_limit:Number(document.querySelector("#model-token-limit").value),groq_confirmed:document.querySelector("#model-groq-confirmed").checked,
       endpoint:setupEndpoint || (connectionMethod === "endpoint" ? document.querySelector("#model-endpoint").value : ""),command:connectionMethod === "cli" ? document.querySelector("#model-command").value : "",environment:connectionMethod === "cli" ? document.querySelector("#model-environment").value : "",
       environment_values:setupValues,endpoint_consent:Boolean(endpointConsent && endpointConsent === (setupState?.endpoint || document.querySelector("#model-endpoint").value)),billing_guard_confirmed:billingConsent,
       input_price:document.querySelector("#setup-input-price")?.value ? Number(document.querySelector("#setup-input-price").value) : null,output_price:document.querySelector("#setup-output-price")?.value ? Number(document.querySelector("#setup-output-price").value) : null};
