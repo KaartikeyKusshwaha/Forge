@@ -241,3 +241,11 @@ Open a record to review it. **End session** stops work, **Forget conversation**
 clears its chat context, and **Delete local record** removes the stopped local
 session and events. These actions do not delete GitHub branches, commits or PRs.
 Do not delete the local database if you want to retain history across updates.
+
+
+Reviewer prompts use bounded test evidence rather than duplicate dependency logs.
+Provider HTTP 413 input-capacity failures trigger a bounded attempt with redundant
+logs and metadata removed. Complete source files, proposed edits, contribution
+guidelines, exit codes and test counts are preserved. If complete evidence still
+cannot fit, Forge asks for a smaller task or a model with sufficient capacity.
+It does not silently truncate source files to make a request succeed.

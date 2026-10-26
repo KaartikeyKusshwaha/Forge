@@ -7,8 +7,10 @@ The controller verifies the reconstructed source before setup.
 
 ## Python
 
-The controller reads `pyproject.toml`, standard requirements files and nested
-requirements includes without importing the project. It collects runtime,
+The controller reads `pyproject.toml`, standard requirements files, included
+PEP 735 dependency groups, `setup.cfg` requirements and nested requirements
+includes without importing the project. Cyclic dependency groups fail before
+package retrieval. It collects runtime,
 test/dev and build dependencies. A separate unprivileged download stage resolves
 compatible wheels from PyPI. Downloaded wheel names and SHA-256 hashes accompany
 the report. Each check gets a fresh virtual environment, with no shared cache.
