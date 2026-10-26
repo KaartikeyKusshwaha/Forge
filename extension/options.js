@@ -15,13 +15,13 @@ async function inspect() {
   box.replaceChildren();
   for (const line of [
     `GitHub access: ${data.github ? data.github_auth === "cli" ? "connected · owner CLI" : "connected · App" : "not connected yet"}`,
-    `Free model: ${data.model ? data.model_name : "API key needed · demo available"}`,
+    `Connected model: ${data.model ? data.model_name : "API key needed · demo available"}`,
     `Isolated GitHub runner: ${data.runner ? "available" : "sign in to GitHub CLI"}`,
     `Publishing: ${data.publishing ? "enabled after approval" : "disabled"}`
   ]) { const p = document.createElement("div"); p.textContent = line; box.append(p); }
   document.querySelector("#model-panel").hidden = false;
   await loadProfiles();
-  try {const helper=await call("setup-helper-status");document.querySelector("#helper-status").textContent=helper.configured ? "Your local Groq setup assistant is configured. Normal detection works without it." : "Optional. Detection and local configuration work without an AI API.";}catch{}
+  try {const helper=await call("setup-helper-status");document.querySelector("#helper-status").textContent=helper.connected_model ? `Setup help can use ${helper.connected_model}. Normal detection needs no AI API.` : helper.configured ? "Your separate setup assistant is configured. Normal detection works without it." : "Optional. Detection and local configuration work without an AI API.";}catch{}
 }
 
 const modelMessage = document.querySelector("#model-message");
@@ -46,7 +46,7 @@ function setupView(setup) {
     const input=document.createElement("input");input.id="setup-endpoint";input.type="url";input.placeholder="https://provider.example/v1";input.setAttribute("aria-label","Missing provider endpoint");box.append(input);
   }
   if(["key","environment"].includes(setup.needs)){
-    for(const name of setup.variables || ["API_KEY"]){const label=document.createElement("label");label.textContent=name;const input=document.createElement("input");input.type="password";input.autocomplete="off";input.dataset.variable=name;input.setAttribute("aria-label",name);box.append(label,input);}
+    for(const name of setup.variables || ["API_KEY"]){const label=document.createElement("label");label.textContent=name;const input=document.createElement("input");input.type=name === "CLOUDFLARE_ACCOUNT_ID" ? "text" : "password";input.autocomplete="off";input.dataset.variable=name;input.setAttribute("aria-label",name);box.append(label,input);}
     const note=document.createElement("p");note.textContent="Save on this device for this Forge integration. No global shell profile changes or provider key sharing.";box.append(note);
   }
   if(setup.needs === "pricing"){

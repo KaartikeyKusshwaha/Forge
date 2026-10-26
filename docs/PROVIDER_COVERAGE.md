@@ -12,6 +12,7 @@ not a static global list.
 | Route | Connection path | Evidence / boundary |
 | --- | --- | --- |
 | OpenRouter | Distinct key; catalog and zero-price filtering | Multiple model families; model-specific access restrictions still apply |
+| Cloudflare Workers AI | Token + Account ID, official native catalog and compatible inference | [Official API compatibility](https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/) · Free mode filters documented paid-only models; Cloudflare account billing controls the allowance |
 | Groq | Distinct key; active text-model catalog | Usage selection is stored; no repeated Free-key prompt |
 | Gemini | Distinct key or named variable; OpenAI compatibility endpoint | [Official compatibility guide](https://ai.google.dev/gemini-api/docs/openai) |
 | DeepSeek | Named variable or provider example; Chat Completions, Responses or Anthropic format | [Official API guide](https://api-docs.deepseek.com/quick_start/agent_integrations/) |
@@ -54,3 +55,19 @@ Azure deployment routing, AWS/Vertex service-account authentication, realtime,
 image/audio/video APIs and arbitrary noncompatible APIs need dedicated adapters
 or a configured gateway. Credentials stay with the owning installation. Public
 releases contain no developer API key.
+
+
+Cloudflare tokens do not encode an Account ID. Forge detects `cfut_` tokens and
+asks for the Account ID, or reads it from a provider example. Catalog discovery
+uses `/accounts/{id}/ai/models/search`; inference uses
+`/accounts/{id}/ai/v1/chat/completions`. API tokens need Workers AI Read permission
+for that account. Token/account mismatches and cross-provider destinations are
+rejected. Optional setup help defaults to the connected model; Groq remains an
+explicit separate option rather than an implicit fallback.
+
+Workers AI's free allocation is account-wide, not an unlimited free model price.
+Cloudflare includes 10,000 Neurons per day; Workers Paid accounts can incur usage
+charges beyond it. Forge retains the selected usage policy and cannot alter the
+account's billing plan. [Cloudflare pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)
+explains the provider-side limits. No Cloudflare token or Account ID is bundled
+with Forge's public releases.

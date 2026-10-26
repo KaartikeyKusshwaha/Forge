@@ -249,3 +249,10 @@ logs and metadata removed. Complete source files, proposed edits, contribution
 guidelines, exit codes and test counts are preserved. If complete evidence still
 cannot fit, Forge asks for a smaller task or a model with sufficient capacity.
 It does not silently truncate source files to make a request succeed.
+
+
+Cloudflare Workers AI is supported directly: paste a token and provide the Account
+ID when prompted, or paste an official API example. Forge reads Cloudflare's native
+model catalog, selects a text model, and calls its compatible inference endpoint.
+Credentials stay in the installation's protected model vault. Optional setup help
+can use the connected model, so a second Groq key is not required.

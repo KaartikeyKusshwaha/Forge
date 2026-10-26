@@ -35,7 +35,7 @@
     </form>
     <p id="model-message" role="status" aria-live="polite"></p>
     <section id="integration-setup" hidden aria-live="polite"></section>
-    <label for="setup-help-source">Optional setup help</label><select id="setup-help-source"><option value="groq">Separate Groq setup key</option><option value="connected">Use my connected model</option></select><button id="setup-help" type="button">Help with this configuration</button><div id="setup-help-result" role="status"></div>
+    <label for="setup-help-source">Optional setup help</label><select id="setup-help-source"><option value="connected">Use my connected model</option><option value="groq">Separate Groq setup key</option></select><button id="setup-help" type="button">Help with this configuration</button><div id="setup-help-result" role="status"></div>
     <details id="setup-helper"><summary>Optional setup assistant · your own Groq key</summary><p>Normal detection needs no AI API. Add your own Groq Free key for help interpreting unfamiliar examples. The helper sees configuration structure, not your other provider keys.</p><label for="helper-key">Setup assistant API key</label><input id="helper-key" type="password" autocomplete="off"><label class="check-label"><input id="helper-free" type="checkbox">Use only this key’s free allowance for setup help.</label><button id="helper-connect" type="button">Connect my setup assistant</button><p id="helper-status" role="status"></p></details>
     <div id="model-profiles"></div>
     <h3>Paid usage permissions</h3><p>When a run needs a paid API call, approve its reserved maximum here. Requests expire after five minutes.</p><div id="model-spending"></div>

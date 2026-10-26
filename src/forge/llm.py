@@ -93,7 +93,16 @@ def verify_free(config: Settings) -> dict:
         )
         if config.llm_model not in {m["id"] for m in result.get("models", [])}:
             raise PolicyError("The selected model is no longer available at this endpoint.")
-        return {"id": config.llm_model, "parameters": [], "prices": record["rates"]}
+        selected = next(m for m in result["models"] if m["id"] == config.llm_model)
+        if config.model_usage_mode == "free_only" and selected.get("requires_paid_plan"):
+            raise PolicyError(
+                "This Cloudflare model requires paid billing. Choose a model available within the free allocation."
+            )
+        return {
+            "id": config.llm_model,
+            "parameters": selected.get("parameters", []),
+            "prices": record["rates"],
+        }
     if config.model_profile_id and config.model_usage_mode != "free_only":
         from forge.models import ENDPOINTS, discover
 

@@ -163,6 +163,19 @@ def parse_example(key="", endpoint="", code="", environment="", supplied=None):
                 "model": model,
                 "message": f"The example references {', '.join(envs)}. Enter the missing key below and approve saving it for this Forge integration.",
             }
+    if not endpoint and (key.startswith("cfut_") or "CLOUDFLARE" in code):
+        from forge.cloudflare import endpoint as cloudflare_endpoint
+
+        account = supplied.get("CLOUDFLARE_ACCOUNT_ID") or os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+        match = re.search(r"CLOUDFLARE_ACCOUNT_ID[\"']?\s*[=:]\s*[\"']?([a-fA-F0-9]{32})", code)
+        account = account or (match[1] if match else "")
+        if not account:
+            return {
+                "needs": "environment",
+                "variables": ["CLOUDFLARE_ACCOUNT_ID"],
+                "message": "Cloudflare detected. Enter your Account ID to connect this token to Workers AI.",
+            }
+        endpoint = cloudflare_endpoint(account)
     if not endpoint:
         names = set(envs) | set(re.findall(r"\b[A-Z][A-Z0-9_]*(?:API_KEY|TOKEN)\b", code))
         matches = {ENV_ENDPOINTS[n] for n in names if n in ENV_ENDPOINTS}
@@ -176,6 +189,11 @@ def parse_example(key="", endpoint="", code="", environment="", supplied=None):
             "message": "This key does not uniquely identify its provider. Paste the provider's endpoint or curl/Python/JavaScript API example. Your key has not been sent anywhere.",
         }
     endpoint, local = endpoint_base(endpoint)
+    if key.startswith("cfut_") and urlparse(endpoint).hostname not in {
+        "api.cloudflare.com",
+        "gateway.ai.cloudflare.com",
+    }:
+        raise PolicyError("The Cloudflare token and supplied endpoint identify different services.")
     detected = next((base for prefix, base in PREFIXES.items() if key.startswith(prefix)), None)
     if detected and endpoint_base(detected)[0] != endpoint:
         raise PolicyError(
@@ -211,6 +229,11 @@ def parse_example(key="", endpoint="", code="", environment="", supplied=None):
 
 def discover_compatible(endpoint, key, protocol="openai", model=""):
     endpoint = validate_remote(endpoint)
+    from forge.cloudflare import discover as cloudflare_discover
+    from forge.cloudflare import is_workers_ai
+
+    if is_workers_ai(endpoint):
+        return cloudflare_discover(endpoint, key, model)
     headers = {"Authorization": "Bearer " + key} if key else {}
     if protocol == "anthropic":
         headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
@@ -384,6 +407,13 @@ def prepare_connection(body, config, vault):
 
     # Saved variable names are integration-local: API_KEY on one service must
     # never silently select another service's credential.
+    if body.account_id:
+        from forge.cloudflare import endpoint as cloudflare_endpoint
+
+        target_endpoint = cloudflare_endpoint(body.account_id)
+        if body.endpoint and endpoint_base(body.endpoint)[0] != target_endpoint:
+            raise PolicyError("Cloudflare Account ID does not match the supplied endpoint.")
+        body.endpoint = target_endpoint
     initial = parse_example(
         body.api_key, body.endpoint, body.command, body.environment, body.environment_values
     )
@@ -456,8 +486,8 @@ def prepare_connection(body, config, vault):
             key,
             endpoint,
             parsed["protocol"],
-            result["models"],
-            body.label,
+            [m for m in result["models"] if body.mode != "free_only" or not m.get("requires_paid_plan")],
+            body.label or result.get("provider_name", ""),
             body.mode,
             body.budget_usd,
             rates,

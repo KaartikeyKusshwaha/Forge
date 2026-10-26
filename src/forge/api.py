@@ -59,6 +59,7 @@ class RepositoryRequest(BaseModel):
 
 class ModelConnection(BaseModel):
     api_key: str = Field(default="", repr=False)
+    account_id: str = Field(default="", max_length=32, pattern=r"^$|^[a-fA-F0-9]{32}$")
     label: str = Field(default="", max_length=100)
     provider: Literal["auto", "openrouter-free", "groq-free"] = (
         "auto"  # Legacy clients only; UI has no picker.
@@ -66,7 +67,7 @@ class ModelConnection(BaseModel):
     mode: Literal["free_only", "limited", "unlimited", "ask_paid", "capped"] = "free_only"
     call_limit: int = Field(default=100, ge=1, le=1000000)
     token_limit: int = Field(default=1000000, ge=1000, le=1000000000)
-    use_connected_model: bool = False
+    use_connected_model: bool = True
     budget_usd: float = Field(default=0, ge=0, le=1000, allow_inf_nan=False)
     groq_confirmed: bool = False
     activate: bool = True
@@ -108,7 +109,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     async def lifespan(app):
         yield
 
-    app = FastAPI(title="Forge", version="0.7.1", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Forge", version="0.8.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
     app.state.store = db
     vault = ModelVault(config)
@@ -170,7 +171,7 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
 
     @app.get("/health")
     def health():
-        return {"service": "forge", "version": "0.7.1", "status": "ok"}
+        return {"service": "forge", "version": "0.8.0", "status": "ok"}
 
     @app.get("/api/status", dependencies=[Depends(authenticated)])
     def status():
@@ -210,7 +211,11 @@ def create_app(config: Settings, store: Store | None = None) -> FastAPI:
     def setup_assistant_status():
         from forge.integrations import groq_helper
 
-        return {"configured": groq_helper(config) is not None, "required": False}
+        return {
+            "configured": config.llm_ready or groq_helper(config) is not None,
+            "connected_model": config.llm_model if config.llm_ready else None,
+            "required": False,
+        }
 
     @app.get("/api/device-setup", dependencies=[Depends(authenticated)])
     def device_setup_status():
