@@ -16,6 +16,25 @@ def test_cloudflare_token_requests_account_without_probing_a_provider():
     assert result["endpoint"] == endpoint(ACCOUNT)
 
 
+def test_cloudflare_shell_example_keeps_routing_id_separate_from_secret(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    code = 'curl https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/v1/chat/completions -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"'
+    assert parse_example(code=code)["variables"] == ["CLOUDFLARE_ACCOUNT_ID"]
+    result = parse_example(
+        code=code, supplied={"CLOUDFLARE_ACCOUNT_ID": ACCOUNT, "CLOUDFLARE_API_TOKEN": "cfut_fixture_secret"}
+    )
+    assert result["endpoint"] == endpoint(ACCOUNT)
+    assert result["key"] == "cfut_fixture_secret"
+    assert "CLOUDFLARE_ACCOUNT_ID" not in result["environment_names"]
+
+
+def test_cloudflare_token_cannot_be_redirected_to_another_vendor():
+    with pytest.raises(PolicyError, match="different services"):
+        parse_example("cfut_fixture_secret", "https://other.example/v1")
+
+
 def test_native_catalog_is_adapted_to_compatible_models(monkeypatch):
     requests = []
 

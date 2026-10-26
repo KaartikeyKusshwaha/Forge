@@ -84,6 +84,31 @@ def parse_example(key="", endpoint="", code="", environment="", supplied=None):
     supplied = supplied or {}
     if len(code) > 30000:
         raise PolicyError("Provider example is too long.")
+    if "api.cloudflare.com" in code and "CLOUDFLARE_ACCOUNT_ID" in code:
+        values = dotenv_values(".env")
+        account = (
+            supplied.get("CLOUDFLARE_ACCOUNT_ID")
+            or os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+            or values.get("CLOUDFLARE_ACCOUNT_ID", "")
+        )
+        match = re.search(r"CLOUDFLARE_ACCOUNT_ID[\"']?\s*[=:]\s*[\"']?([a-fA-F0-9]{32})", code)
+        account = account or (match[1] if match else "")
+        if not account:
+            return {
+                "needs": "environment",
+                "variables": ["CLOUDFLARE_ACCOUNT_ID"],
+                "message": "Enter the Cloudflare Account ID referenced by this example.",
+            }
+        from forge.cloudflare import endpoint as cloudflare_endpoint
+
+        cloudflare_endpoint(account)  # Validate before substituting only this non-secret routing value.
+        for marker in (
+            "${CLOUDFLARE_ACCOUNT_ID}",
+            "$CLOUDFLARE_ACCOUNT_ID",
+            "{CLOUDFLARE_ACCOUNT_ID}",
+            "${env.CLOUDFLARE_ACCOUNT_ID}",
+        ):
+            code = code.replace(marker, account)
     literals = []
     try:
         tree = ast.parse(code)
@@ -151,7 +176,8 @@ def parse_example(key="", endpoint="", code="", environment="", supplied=None):
         key = ""
     if not key and envs:
         values = dotenv_values(".env")
-        for name in envs:
+        credential_envs = [name for name in envs if name != "CLOUDFLARE_ACCOUNT_ID"]
+        for name in credential_envs:
             key = supplied.get(name) or os.environ.get(name) or values.get(name) or ""
             if key:
                 break
@@ -222,7 +248,7 @@ def parse_example(key="", endpoint="", code="", environment="", supplied=None):
         "local": local,
         "protocol": protocol,
         "model": model,
-        "environment_names": envs,
+        "environment_names": [name for name in envs if name != "CLOUDFLARE_ACCOUNT_ID"],
         "literals": literals,
     }
 
