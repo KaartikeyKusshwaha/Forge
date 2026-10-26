@@ -1,0 +1,47 @@
+{
+  "run_id": "7aae4cc5e8075f63a989ade9934ee526",
+  "repository": "KaartikeyKusshwaha/Forge-Acceptance",
+  "issue": 1,
+  "model": "qwen/qwen3.8-27b",
+  "status": "awaiting_approval",
+  "fingerprint": "370f741ab966fd2383c465ffc7fffe40e905de98f9e2a854ab9ed98471d906f3",
+  "checks": [
+    {
+      "phase": "baseline",
+      "status": "passed",
+      "count": 2,
+      "exit_code": 0,
+      "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40290133847"
+    },
+    {
+      "phase": "regression_on_base",
+      "status": "failed",
+      "count": 8,
+      "exit_code": 1,
+      "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40290213410"
+    },
+    {
+      "phase": "candidate",
+      "status": "passed",
+      "count": 8,
+      "exit_code": 0,
+      "run_url": "https://github.com/KaartikeyKusshwaha/Forge/actions/runs/40290258589"
+    }
+  ],
+  "model_usage": {
+    "calls": 7,
+    "tokens": 8272,
+    "cost": 0,
+    "run_id": "7aae4cc5e8075f63a989ade9934ee526",
+    "pricing": "Free-only model access",
+    "awaiting_spend_permission": false,
+    "output_recovery": [
+      {
+        "role": "tester",
+        "attempt": 1,
+        "reason": "Schema validation: [{\"field\": [\"edits\"], \"type\": \"missing\"}]"
+      }
+    ]
+  },
+  "published": false
+}
